@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReaperEmporiumLocalization", "ReaperEmporiumLocalization\ReaperEmporiumLocalization.csproj", "{31576254-1A72-475A-9BC2-A11E29FDFFF1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IgnoreSpecificLog", "IgnoreSpecificLog\IgnoreSpecificLog.csproj", "{1A55B743-9FF6-49CE-A4F6-F1488F4DEC3F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReaperEmporiumLocalization.Preload", "ReaperEmporiumLocalization.Preload\ReaperEmporiumLocalization.Preload.csproj", "{EE636E58-EEC9-443E-AA5A-0EFC545D7209}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReaperEmporiumLocalization.Shared", "ReaperEmporiumLocalization.Shared\ReaperEmporiumLocalization.Shared.csproj", "{34A27A9B-B52B-46C2-8AB6-E05C3C8F11AF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{31576254-1A72-475A-9BC2-A11E29FDFFF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{31576254-1A72-475A-9BC2-A11E29FDFFF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{31576254-1A72-475A-9BC2-A11E29FDFFF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{31576254-1A72-475A-9BC2-A11E29FDFFF1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A55B743-9FF6-49CE-A4F6-F1488F4DEC3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A55B743-9FF6-49CE-A4F6-F1488F4DEC3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A55B743-9FF6-49CE-A4F6-F1488F4DEC3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A55B743-9FF6-49CE-A4F6-F1488F4DEC3F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE636E58-EEC9-443E-AA5A-0EFC545D7209}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE636E58-EEC9-443E-AA5A-0EFC545D7209}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE636E58-EEC9-443E-AA5A-0EFC545D7209}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE636E58-EEC9-443E-AA5A-0EFC545D7209}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34A27A9B-B52B-46C2-8AB6-E05C3C8F11AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34A27A9B-B52B-46C2-8AB6-E05C3C8F11AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34A27A9B-B52B-46C2-8AB6-E05C3C8F11AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34A27A9B-B52B-46C2-8AB6-E05C3C8F11AF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

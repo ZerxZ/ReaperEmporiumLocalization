@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" InitialTargets="ValidateGamePath">
+
+    <Import Project="../GameFolder.props" Condition="Exists('../GameFolder.props')" />
+    <Target Name="ValidateGamePath">
+        <Error Text="The GameFolder property must be set to the GTFO game folder." Condition="'$(GameFolder)' == '' or !Exists('$(GameFolder)')" />
+    </Target>
+
+    <PropertyGroup>
+        <BepInExFolder>$(GameFolder)\BepInEx\core</BepInExFolder>
+        <UnhollowedLibsFolder>$(GameFolder)\死神商館RExEX_Data\Managed</UnhollowedLibsFolder>
+        <PluginsFolder>$(GameFolder)\BepInEx\plugins</PluginsFolder>
+        <PatchersFolder>$(GameFolder)\BepInEx\patchers</PatchersFolder>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>14</LangVersion>
+    </PropertyGroup>
+
+
+    <ItemGroup>
+        <Reference Include="$(BepInExFolder)/*.dll" Private="false" />
+        <Reference Include="$(UnhollowedLibsFolder)/*.dll" Private="false" />
+        <Reference Remove="$(UnhollowedLibsFolder)/netstandard.dll" />
+        <Reference Remove="$(BepInExFolder)/0Harmony20.dll" />
+    </ItemGroup>
+
+
+    <ItemGroup>
+<!--      <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />-->
+    </ItemGroup>
+
+
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+        <Exec Command="XCOPY &quot;$(OutDir)\**&quot; &quot;$(PatchersFolder)\ReaperEmporiumLocalization&quot; /s /r /f /y /i" />
+    </Target>
+
+</Project>
