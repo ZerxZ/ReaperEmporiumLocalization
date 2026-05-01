@@ -12,7 +12,11 @@ namespace ReaperEmporiumLocalization.Core
         public static TextAsset TranslateTsv(string assetName, string originalText)
         {
             if (string.IsNullOrEmpty(originalText)) return null;
-
+            // 🎯 使用 TryGetCategory 优雅地获取专属抽屉
+            if (!TranslationManager.Data.TryGetCategory(assetName, out TranslationCategory categoryDict))
+            {
+                return null; 
+            }
             string[] lines = originalText.Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None);
             StringBuilder newTsv = new StringBuilder();
             bool hasAnyTranslation = false;
@@ -34,10 +38,10 @@ namespace ReaperEmporiumLocalization.Core
                     string cellText = cells[j];
                     if (!string.IsNullOrWhiteSpace(cellText) && JapaneseRegex.IsMatch(cellText))
                     {
-                        // 容错：清洗 TSV 单元格中可能存在的隐形回车符
                         string cleanCellText = cellText.Replace("\r", "");
 
-                        if (TranslationManager.Dictionary.TryGetValue(cleanCellText, out string trans))
+                        // 🎯 使用类自带的 TryGetTranslation 方法
+                        if (categoryDict.TryGetTranslation(cleanCellText, out string trans))
                         {
                             cells[j] = trans;
                             lineModified = true;

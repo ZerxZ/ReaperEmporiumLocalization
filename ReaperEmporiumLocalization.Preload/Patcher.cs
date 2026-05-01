@@ -28,7 +28,12 @@ namespace ReaperEmporiumLocalization.Preload
 
             int translationCount = TranslationManager.LoadTranslations(translationPath, true);
             bool hasTranslations = translationCount > 0;
-
+            
+            TranslationCategory dllCategory = null;
+            if (hasTranslations)
+            {
+                TranslationManager.Data.TryGetCategory("dll_strings", out dllCategory);
+            }
             Dictionary<string, ParatranzData> extractedData = new Dictionary<string, ParatranzData>();
 
             foreach (var module in assembly.Modules)
@@ -46,8 +51,10 @@ namespace ReaperEmporiumLocalization.Preload
                                 string rawText = instruction.Operand as string;
                                 if (string.IsNullOrEmpty(rawText) || !JapaneseRegex.IsMatch(rawText)) continue;
 
-                                // 🎯 核心改变：直接拿 rawText (原文) 去查字典
-                                if (hasTranslations && TranslationManager.Dictionary.TryGetValue(rawText, out string trans))
+                                string cleanRawText = rawText.Replace("\r", "");
+                                
+                                // 🎯 调用类专属的方法
+                                if (dllCategory != null && dllCategory.TryGetTranslation(cleanRawText, out string trans))
                                 {
                                     instruction.Operand = trans;
                                 }
