@@ -1,6 +1,7 @@
 ﻿using System;
 using HarmonyLib;
 using ReaperEmporiumLocalization.Core;
+using ReaperEmporiumLocalization.Shared;
 using UnityEngine;
 
 namespace ReaperEmporiumLocalization.Patchers
@@ -20,36 +21,37 @@ namespace ReaperEmporiumLocalization.Patchers
             string bundleName = __instance.name;
             if (string.IsNullOrEmpty(bundleName)) return;
 
-            // 切除 -CAB- 哈希尾巴
+            // 净化文件名，切除 -CAB-
             string cleanAssetName = name;
             int cabIndex = cleanAssetName.IndexOf("-CAB-");
             if (cabIndex > 0) cleanAssetName = cleanAssetName.Substring(0, cabIndex);
 
             string cacheKey = $"{bundleName}_{cleanAssetName}";
 
-            // 存入原始缓存
+            // 存入原始缓存，并触发 Dump 提取
             if (!AssetCache.OriginalAssets.ContainsKey(cacheKey))
             {
                 AssetCache.OriginalAssets[cacheKey] = originalAsset;
-                // 如果需要Dump，在这里调用 DatabaseDumper.DumpTsvToJson 即可
+                
+                // 🎯 完美恢复 Database 提取功能！
+                if (LocalizationConfig.EnableDatabaseDump.Value)
+                {
+                    DatabaseDumper.DumpTsvToJson(bundleName, cleanAssetName, originalAsset.text);
+                }
             }
 
-            // 尝试读取翻译缓存
+            // 尝试翻译替换
             if (AssetCache.TranslatedAssets.TryGetValue(cacheKey, out TextAsset cachedTransAsset))
             {
                 __result = cachedTransAsset;
                 return;
             }
 
-            // 执行翻译替换
             TextAsset newTransAsset = TsvTranslator.TranslateTsv(cleanAssetName, originalAsset.text);
             if (newTransAsset != null)
             {
                 AssetCache.TranslatedAssets[cacheKey] = newTransAsset;
                 __result = newTransAsset; 
-                
-                // 🎯 打印日志：如果你在控制台看到了这条，说明 Hook 成功拦截并替换了！
-                Debug.Log($"[REL.Database] 成功拦截并替换表格: {cleanAssetName}");
             }
         }
     }

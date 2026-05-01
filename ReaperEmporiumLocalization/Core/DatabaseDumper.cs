@@ -1,11 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using BepInEx;
 using Newtonsoft.Json;
 using ReaperEmporiumLocalization.Shared.Models;
+using UnityEngine;
 
 namespace ReaperEmporiumLocalization.Core
 {
@@ -13,50 +12,56 @@ namespace ReaperEmporiumLocalization.Core
     {
         private static readonly Regex JapaneseRegex = new Regex(@"[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]");
 
-        public static void DumpTsvToJson(string bundleName, string assetName, string originalText)
+        public static void DumpTsvToJson(string bundleName, string assetName, string text)
         {
-            if (string.IsNullOrWhiteSpace(originalText) || !JapaneseRegex.IsMatch(originalText)) return;
+            if (string.IsNullOrEmpty(text)) return;
 
-            string dumpPath = Path.Combine(Paths.GameRootPath, "localization", "dump", "database", bundleName, $"{assetName}.json");
-            Dictionary<string, ParatranzData> localData = new Dictionary<string, ParatranzData>();
+            // 🎯 核心修复：在此处加上 "database" 层级，保持与读取目录的绝对对称
+            string dumpDir = Path.Combine(Paths.GameRootPath, "localization", "dump", "database");
+            if (!Directory.Exists(dumpDir)) Directory.CreateDirectory(dumpDir);
 
-            string[] lines = originalText.Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None);
-            foreach (var line in lines)
+            // 导出的文件名绝对纯净，如 db_EventInfo.json
+            string dumpPath = Path.Combine(dumpDir, $"{assetName}.json");
+
+            // 如果文件已存在，说明之前提取过，跳过以节省性能
+            if (File.Exists(dumpPath)) return;
+
+            List<ParatranzData> dumpList = new List<ParatranzData>();
+            string[] lines = text.Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None);
+
+            for (int i = 0; i < lines.Length; i++)
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (string.IsNullOrEmpty(lines[i])) continue;
 
-                string[] cells = line.Split('\t');
+                string[] cells = lines[i].Split('\t');
                 string rowId = cells.Length > 0 ? cells[0] : "UNKNOWN";
 
-                for (int j = 1; j < cells.Length; j++)
+                for (int j = 0; j < cells.Length; j++)
                 {
                     string cellText = cells[j];
                     if (!string.IsNullOrWhiteSpace(cellText) && JapaneseRegex.IsMatch(cellText))
                     {
-                        // 🎯 核心修改：生成相同的坐标 Key，彻底抛弃 MD5
-                        string coordinateKey = $"{assetName}_{rowId}_{j}";
-                        string cleanText = cellText.Replace("\r\n", "\\n").Replace("\n", "\\n");
+                        // 生成唯一 Key，仅供 Paratranz 网站做记忆库绑定使用
+                        string entryKey = $"{assetName}_{rowId}_{j}";
+                        string cleanOriginal = cellText.Replace("\r", "").Replace("\n", "\\n");
 
-                        if (!localData.ContainsKey(coordinateKey))
+                        dumpList.Add(new ParatranzData
                         {
-                            localData[coordinateKey] = new ParatranzData
-                            {
-                                Key = coordinateKey,
-                                Original = cleanText,
-                                Translation = "",
-                                Stage = StageEnum.未翻译,
-                                Context = ""
-                            };
-                        }
+                            Key = entryKey,
+                            Original = cleanOriginal,
+                            Translation = "",
+                            Stage = StageEnum.未翻译,
+                            Context = ""
+                        });
                     }
                 }
             }
 
-            if (localData.Count > 0)
+            if (dumpList.Count > 0)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(dumpPath));
-                var dataList = localData.Values.OrderBy(d => d.Key).ToList();
-                File.WriteAllText(dumpPath, JsonConvert.SerializeObject(dataList, Formatting.Indented), Encoding.UTF8);
+                File.WriteAllText(dumpPath, JsonConvert.SerializeObject(dumpList, Formatting.Indented), System.Text.Encoding.UTF8);
+                // 日志也同步修改，方便在控制台确认层级
+                Debug.Log($"[REL.Dumper] 成功提取表格并保存至: database/{assetName}.json");
             }
         }
     }
