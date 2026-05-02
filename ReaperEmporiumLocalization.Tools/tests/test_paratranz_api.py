@@ -269,6 +269,167 @@ class ParatranzApiTests(unittest.TestCase):
         self.assertEqual(dll[0]["translation"], "")
         self.assertEqual(dll[0]["stage"], 0)
 
+    def test_migrate_legacy_translations_maps_asset_text_to_build_migrated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "source"
+            dump_root = root / "build" / "dump"
+            output_root = root / "build" / "migrated"
+            (output_root / "stale.txt").parent.mkdir(parents=True)
+            (output_root / "stale.txt").write_text("old", encoding="utf-8")
+            self._write_entries(
+                source_root / "utf8" / "asset_00_text" / "db_Test-CAB-abc.json",
+                [{"key": "old-key", "original": "Hello", "translation": "Ni hao", "stage": 1, "context": ""}],
+            )
+            self._write_entries(
+                dump_root / "MainGame" / "database" / "asset_00_text" / "db_Test.json",
+                [{"key": "0", "original": "Hello", "translation": "", "stage": 0, "context": ""}],
+            )
+
+            api = Paratranz(project_id=123, token="secret", rate_limit=RateLimitSettings(requests_per_second=1000))
+            result = api.migrate_legacy_translations_to_dump(source_root, dump_root, output_root, dry_run=False)
+            migrated = json.loads(
+                (output_root / "MainGame" / "database" / "asset_00_text" / "db_Test.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result.migrated_entries, 1)
+        self.assertFalse((output_root / "stale.txt").exists())
+        self.assertEqual(migrated[0]["key"], "0")
+        self.assertEqual(migrated[0]["translation"], "Ni hao")
+        self.assertEqual(migrated[0]["stage"], 1)
+
+    def test_migrate_legacy_translations_merges_duplicate_dlc_files_and_reports_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "source"
+            dump_root = root / "build" / "dump"
+            output_root = root / "build" / "migrated"
+            self._write_entries(
+                source_root / "utf8" / "asset_00_text_DLC" / "db_Dlc-CAB-a.json",
+                [{"key": "0", "original": "Shared", "translation": "A", "stage": 1, "context": ""}],
+            )
+            self._write_entries(
+                source_root / "utf8" / "asset_00_text_DLC" / "db_Dlc-CAB-b.json",
+                [{"key": "1", "original": "Shared", "translation": "B", "stage": 1, "context": ""}],
+            )
+            self._write_entries(
+                dump_root / "DLCGame" / "database" / "asset_00_text" / "db_Dlc.json",
+                [{"key": "0", "original": "Shared", "translation": "", "stage": 0, "context": ""}],
+            )
+
+            api = Paratranz(project_id=123, token="secret", rate_limit=RateLimitSettings(requests_per_second=1000))
+            result = api.migrate_legacy_translations_to_dump(source_root, dump_root, output_root, dry_run=False)
+            report = json.loads((output_root / "migration_report.json").read_text(encoding="utf-8"))
+            migrated = json.loads(
+                (output_root / "DLCGame" / "database" / "asset_00_text" / "db_Dlc.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result.migrated_entries, 1)
+        self.assertEqual(migrated[0]["translation"], "A")
+        self.assertEqual(len(report["duplicate_files"]), 1)
+        self.assertEqual(len(report["conflicts"]), 1)
+
+    def test_migrate_legacy_translations_does_not_fuzzy_match_database_original(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "source"
+            dump_root = root / "build" / "dump"
+            output_root = root / "build" / "migrated"
+            self._write_entries(
+                source_root / "utf8" / "asset_00_text" / "db_Test.json",
+                [{"key": "0", "original": "ならずもの", "translation": "旧译文", "stage": 1, "context": ""}],
+            )
+            self._write_entries(
+                dump_root / "MainGame" / "database" / "asset_00_text" / "db_Test.json",
+                [{"key": "0", "original": "ならずものA", "translation": "", "stage": 0, "context": ""}],
+            )
+
+            api = Paratranz(project_id=123, token="secret", rate_limit=RateLimitSettings(requests_per_second=1000))
+            result = api.migrate_legacy_translations_to_dump(source_root, dump_root, output_root, dry_run=False)
+            migrated = json.loads(
+                (output_root / "MainGame" / "database" / "asset_00_text" / "db_Test.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result.migrated_entries, 0)
+        self.assertEqual(migrated[0]["translation"], "")
+        self.assertEqual(migrated[0]["stage"], 0)
+
+    def test_migrate_legacy_translations_reads_remote_source_with_get_only(self) -> None:
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.path == "/api/projects/999/files":
+                return httpx.Response(200, json=[{"id": 7, "name": "asset_00_text/db_Remote.json"}])
+            if request.url.path == "/api/projects/999/files/7/translation":
+                return httpx.Response(
+                    200,
+                    json=[{"key": "old", "original": "Remote", "translation": "远程译文", "stage": 1, "context": ""}],
+                )
+            return httpx.Response(404, json={"message": "not found"})
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dump_root = root / "build" / "dump"
+            output_root = root / "build" / "migrated"
+            self._write_entries(
+                dump_root / "MainGame" / "database" / "asset_00_text" / "db_Remote.json",
+                [{"key": "0", "original": "Remote", "translation": "", "stage": 0, "context": ""}],
+            )
+
+            api = Paratranz(
+                httpx.Client(transport=httpx.MockTransport(handler)),
+                project_id=123,
+                token="secret",
+                rate_limit=RateLimitSettings(requests_per_second=1000),
+            )
+            result = api.migrate_legacy_translations_to_dump(
+                root / "missing",
+                dump_root,
+                output_root,
+                source_project_id=999,
+                dry_run=False,
+            )
+            migrated = json.loads(
+                (output_root / "MainGame" / "database" / "asset_00_text" / "db_Remote.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result.migrated_entries, 1)
+        self.assertEqual(migrated[0]["translation"], "远程译文")
+        self.assertEqual({request.method for request in requests}, {"GET"})
+
+    def test_migrate_legacy_translations_dll_requires_new_exact_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "source"
+            dump_root = root / "build" / "dump"
+            output_root = root / "build" / "migrated"
+            self._write_entries(
+                source_root / "utf8" / "dll" / "strings.json",
+                [
+                    {"key": "Game.Type.Run_0", "original": "Run", "translation": "运行", "stage": 1, "context": "ctx"},
+                    {"key": "12345", "original": "Numeric", "translation": "数字旧键", "stage": 1, "context": ""},
+                    {"key": "Game.Type.Talk_IL_0001", "original": "Talk", "translation": "说话", "stage": 1, "context": "ctx"},
+                ],
+            )
+            self._write_entries(
+                dump_root / "MainGame" / "dll_strings.json",
+                [
+                    {"key": "Game.Type.Run_0", "original": "Run", "translation": "", "stage": 0, "context": "ctx"},
+                    {"key": "Game.Type.Numeric_0", "original": "Numeric", "translation": "", "stage": 0, "context": ""},
+                    {"key": "Game.Type.Talk_0", "original": "Talk", "translation": "", "stage": 0, "context": "ctx"},
+                ],
+            )
+
+            api = Paratranz(project_id=123, token="secret", rate_limit=RateLimitSettings(requests_per_second=1000))
+            result = api.migrate_legacy_translations_to_dump(source_root, dump_root, output_root, dry_run=False)
+            dll = json.loads((output_root / "MainGame" / "dll_strings.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(result.migrated_entries, 2)
+        self.assertEqual(dll[0]["translation"], "运行")
+        self.assertEqual(dll[1]["translation"], "数字旧键")
+        self.assertEqual(dll[2]["translation"], "")
+
     def _write_entries(self, path: Path, entries: list[dict]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")

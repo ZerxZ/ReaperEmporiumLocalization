@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import tempfile
 import time
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from zipfile import ZipFile
@@ -44,9 +47,40 @@ from src.models import (
 )
 
 MAIN_GAME_DIR = "MainGame"
+DLC_GAME_DIR = "DLCGame"
 DLL_STRINGS_FILE = "dll_strings.json"
 DATABASE_DIR = "database"
 DEFAULT_BASE_URL = "https://paratranz.cn/api"
+MIGRATION_REPORT_FILE = "migration_report.json"
+_CAB_SUFFIX_PATTERN = re.compile(r"-CAB-.*$")
+_NUMBER_SUFFIX_PATTERN = re.compile(r"_\d+$")
+_ASSET_TEXT_DIR_PATTERN = re.compile(r"^asset_\d+_text(?:_DLC)?$", re.IGNORECASE)
+
+
+@dataclass(slots=True)
+class _LegacyEntryCandidate:
+    """旧 ParaTranz 词条候选，保留来源用于择优和报告冲突。"""
+
+    entry: ParatranzData
+    source_path: str
+    source_priority: int
+    order: int
+
+
+@dataclass(slots=True)
+class _LegacyTranslationIndex:
+    """旧译文索引，按目标文件优先，同时保留全局兜底池。"""
+
+    database_by_file: dict[str, dict[str, list[_LegacyEntryCandidate]]]
+    database_global: dict[str, list[_LegacyEntryCandidate]]
+    dll_by_file: dict[str, dict[tuple[str, str, str], list[_LegacyEntryCandidate]]]
+    dll_global: dict[tuple[str, str, str], list[_LegacyEntryCandidate]]
+    dll_original_by_file: dict[str, dict[str, list[_LegacyEntryCandidate]]]
+    dll_original_global: dict[str, list[_LegacyEntryCandidate]]
+    file_mappings: list[dict[str, Any]]
+    duplicate_files: dict[str, list[str]]
+    source_files: int = 0
+    source_entries: int = 0
 
 
 class _RateLimiter:
@@ -794,6 +828,108 @@ class Paratranz:
             actions=actions,
         )
 
+    def migrate_legacy_translations_to_dump(
+        self,
+        source_root: str | Path | None = None,
+        dump_root: str | Path | None = None,
+        output_root: str | Path | None = None,
+        *,
+        source_project_id: int | None = None,
+        dry_run: bool = False,
+        show_progress: bool = False,
+    ) -> MigrationResult:
+        """把历史 ParaTranz 译文迁移到当前 build/dump 新结构。
+
+        这个流程只读取旧本地导出或旧远程项目，并把结果写到本地 output_root；它不会调用
+        ParaTranz 的任何写入接口。数据库按 original 精确迁移，DLL 按新 key、original、
+        context 精确迁移，避免把历史结构里的相似词条误套到新提取文本上。
+        """
+
+        source_root_path = Path(source_root) if source_root is not None else paths.paratranz
+        dump_root_path = Path(dump_root) if dump_root is not None else paths.root / "build" / "dump"
+        output_root_path = Path(output_root) if output_root is not None else paths.root / "build" / "migrated"
+
+        if not dump_root_path.is_dir():
+            raise FileNotFoundError(f"新转储目录不存在：{dump_root_path}")
+        if not source_root_path.exists() and source_project_id is None:
+            raise FileNotFoundError(f"旧 ParaTranz 导出目录不存在：{source_root_path}")
+
+        target_files = self._migration_target_files(dump_root_path)
+        if not target_files:
+            raise FileNotFoundError(f"未在新转储目录中找到可迁移的 JSON：{dump_root_path}")
+
+        index = self._build_legacy_translation_index(
+            source_root_path if source_root_path.exists() else None,
+            source_project_id=source_project_id,
+            show_progress=show_progress,
+        )
+        if not dry_run:
+            self._reset_migration_output(output_root_path, dump_root_path)
+
+        actions: list[SyncAction] = []
+        migrated_entries = 0
+        unmatched_entries = 0
+        conflicts: list[dict[str, Any]] = []
+
+        with ProgressBar(total=len(target_files), enabled=show_progress, desc="迁移旧译文", unit="文件") as progress:
+            for target_file in target_files:
+                relative = target_file.relative_to(dump_root_path)
+                output_file = output_root_path / relative
+                entries = self._read_paratranz_file(target_file)
+                migrated, unmatched = self._merge_legacy_dump_entries(relative, entries, index, conflicts)
+                migrated_entries += migrated
+                unmatched_entries += unmatched
+                actions.append(
+                    SyncAction(
+                        action="migrate_legacy_translations",
+                        local_path=target_file,
+                        remote_name=relative.as_posix(),
+                        will_write=not dry_run,
+                        metadata={
+                            "output": output_file.as_posix(),
+                            "migrated_entries": migrated,
+                            "unmatched_entries": unmatched,
+                        },
+                    )
+                )
+                if not dry_run:
+                    self._write_paratranz_file(output_file, entries)
+                progress.set_postfix_str(relative.as_posix())
+                progress.update()
+
+        duplicate_files = [
+            {"logical_path": logical_path, "sources": sources}
+            for logical_path, sources in sorted(index.duplicate_files.items())
+            if len(sources) > 1
+        ]
+        report = {
+            "source_root": self._report_path(source_root_path),
+            "source_project_id": source_project_id,
+            "dump_root": self._report_path(dump_root_path),
+            "output_root": self._report_path(output_root_path),
+            "dry_run": dry_run,
+            "source_files": index.source_files,
+            "source_entries": index.source_entries,
+            "target_files": len(target_files),
+            "migrated_entries": migrated_entries,
+            "unmatched_entries": unmatched_entries,
+            "duplicate_files": duplicate_files,
+            "conflicts": conflicts,
+            "file_mappings": index.file_mappings,
+        }
+        if not dry_run:
+            self._write_migration_report(output_root_path / MIGRATION_REPORT_FILE, report)
+
+        return MigrationResult(
+            planned=len(actions),
+            succeeded=0 if dry_run else len(actions),
+            skipped=unmatched_entries,
+            migrated_entries=migrated_entries,
+            dry_run=dry_run,
+            actions=actions,
+            report=report,
+        )
+
     def _execute_string_batches(
         self,
         actions: list[SyncAction],
@@ -946,6 +1082,308 @@ class Paratranz:
             entry.stage = old_entry.stage
             migrated += 1
         return migrated
+
+    def _build_legacy_translation_index(
+        self,
+        source_root: Path | None,
+        *,
+        source_project_id: int | None,
+        show_progress: bool,
+    ) -> _LegacyTranslationIndex:
+        """读取本地/远程旧译文，并建立按文件与全局兜底的迁移索引。"""
+        index = _LegacyTranslationIndex({}, {}, {}, {}, {}, {}, [], {})
+        order = 0
+
+        if source_root is not None:
+            local_files = self._legacy_local_json_files(source_root)
+            with ProgressBar(total=len(local_files), enabled=show_progress, desc="读取本地旧译文", unit="文件") as progress:
+                for file_path in local_files:
+                    relative_name = file_path.relative_to(source_root).as_posix()
+                    entries = self._read_paratranz_file(file_path)
+                    order = self._add_legacy_file_to_index(
+                        index,
+                        relative_name,
+                        entries,
+                        source_priority=0,
+                        order=order,
+                    )
+                    progress.set_postfix_str(relative_name)
+                    progress.update()
+
+        if source_project_id is not None:
+            remote_files = self.get_files(project_id=source_project_id)
+            with ProgressBar(total=len(remote_files), enabled=show_progress, desc="读取远程旧项目", unit="文件") as progress:
+                for remote_file in remote_files:
+                    if remote_file.id is None or not remote_file.name:
+                        progress.update()
+                        continue
+                    entries = self.get_file_translation(remote_file.id, project_id=source_project_id)
+                    order = self._add_legacy_file_to_index(
+                        index,
+                        remote_file.name,
+                        entries,
+                        source_priority=1,
+                        order=order,
+                    )
+                    progress.set_postfix_str(remote_file.name)
+                    progress.update()
+
+        return index
+
+    def _add_legacy_file_to_index(
+        self,
+        index: _LegacyTranslationIndex,
+        source_name: str,
+        entries: list[ParatranzData],
+        *,
+        source_priority: int,
+        order: int,
+    ) -> int:
+        """把一个旧文件的词条加入迁移索引，重复逻辑文件只记录不覆盖。"""
+        normalized_source = self._normalize_remote_name(source_name)
+        logical_path = self._legacy_logical_dump_path(normalized_source)
+        logical_key = logical_path.as_posix() if logical_path is not None else None
+        is_dll = self._is_legacy_dll_source(normalized_source)
+
+        index.source_files += 1
+        index.source_entries += len(entries)
+        index.file_mappings.append(
+            {
+                "source": normalized_source,
+                "logical_path": logical_key,
+                "entries": len(entries),
+                "kind": "dll" if is_dll else "database",
+            }
+        )
+        if logical_key is not None:
+            index.duplicate_files.setdefault(logical_key, []).append(normalized_source)
+
+        for entry in entries:
+            candidate = _LegacyEntryCandidate(entry, normalized_source, source_priority, order)
+            order += 1
+            if is_dll:
+                identity = (entry.key, entry.original, entry.context)
+                original_identity = entry.runtime_original
+                index.dll_global.setdefault(identity, []).append(candidate)
+                if logical_key is not None:
+                    index.dll_by_file.setdefault(logical_key, {}).setdefault(identity, []).append(candidate)
+                if entry.key.isdecimal() and original_identity.strip():
+                    index.dll_original_global.setdefault(original_identity, []).append(candidate)
+                    if logical_key is not None:
+                        index.dll_original_by_file.setdefault(logical_key, {}).setdefault(original_identity, []).append(candidate)
+                continue
+
+            identity = entry.runtime_original
+            if not identity.strip():
+                continue
+            index.database_global.setdefault(identity, []).append(candidate)
+            if logical_key is not None:
+                index.database_by_file.setdefault(logical_key, {}).setdefault(identity, []).append(candidate)
+        return order
+
+    def _is_legacy_dll_source(self, source_name: str) -> bool:
+        """旧项目里 dll 文件夹等价于当前统一的 dll_strings.json。"""
+        parts = [part.casefold() for part in Path(self._normalize_remote_name(source_name)).parts]
+        return Path(source_name).name == DLL_STRINGS_FILE or "dll" in parts or "dll_strings" in parts
+
+    def _merge_legacy_dump_entries(
+        self,
+        relative: Path,
+        entries: list[ParatranzData],
+        index: _LegacyTranslationIndex,
+        conflicts: list[dict[str, Any]],
+    ) -> tuple[int, int]:
+        """把旧译文索引合并进一个新 dump 文件，返回迁移/未匹配词条数。"""
+        relative_key = relative.as_posix()
+        migrated = 0
+        unmatched = 0
+        is_dll = relative.name == DLL_STRINGS_FILE
+
+        for entry in entries:
+            if is_dll:
+                identity = (entry.key, entry.original, entry.context)
+                file_candidates = index.dll_by_file.get(relative_key, {}).get(identity, [])
+                candidates = file_candidates or index.dll_global.get(identity, [])
+                chosen = self._choose_legacy_candidate(
+                    candidates,
+                    target_file=relative_key,
+                    identity=identity,
+                    conflicts=conflicts,
+                )
+                if chosen is None:
+                    original_identity = entry.runtime_original
+                    file_candidates = index.dll_original_by_file.get(relative_key, {}).get(original_identity, [])
+                    candidates = file_candidates or index.dll_original_global.get(original_identity, [])
+                    chosen = self._choose_legacy_candidate(
+                        candidates,
+                        target_file=relative_key,
+                        identity=original_identity,
+                        conflicts=conflicts,
+                    )
+            else:
+                identity = entry.runtime_original
+                file_candidates = index.database_by_file.get(relative_key, {}).get(identity, [])
+                candidates = file_candidates or index.database_global.get(identity, [])
+                chosen = self._choose_legacy_candidate(
+                    candidates,
+                    target_file=relative_key,
+                    identity=identity,
+                    conflicts=conflicts,
+                )
+            if chosen is None:
+                unmatched += 1
+                continue
+            entry.translation = chosen.entry.translation
+            entry.stage = chosen.entry.stage
+            migrated += 1
+        return migrated, unmatched
+
+    def _choose_legacy_candidate(
+        self,
+        candidates: list[_LegacyEntryCandidate],
+        *,
+        target_file: str,
+        identity: str | tuple[str, str, str],
+        conflicts: list[dict[str, Any]],
+    ) -> _LegacyEntryCandidate | None:
+        """按译文质量和来源优先级选择一个旧词条，质量相同冲突写入报告。"""
+        usable = [candidate for candidate in candidates if candidate.entry.translation.strip()]
+        if not usable:
+            return None
+
+        stable = sorted(usable, key=lambda candidate: (candidate.source_path.casefold(), candidate.order))
+        best_quality = max(candidate.entry.quality_rank() for candidate in stable)
+        top_quality = [candidate for candidate in stable if candidate.entry.quality_rank() == best_quality]
+        translations = sorted({candidate.entry.translation for candidate in top_quality if candidate.entry.translation.strip()})
+        if len(translations) > 1:
+            conflicts.append(
+                {
+                    "target_file": target_file,
+                    "identity": list(identity) if isinstance(identity, tuple) else identity,
+                    "translations": translations,
+                    "sources": [candidate.source_path for candidate in top_quality],
+                }
+            )
+
+        best_source_priority = max(candidate.source_priority for candidate in top_quality)
+        for candidate in top_quality:
+            if candidate.source_priority == best_source_priority:
+                return candidate
+        return top_quality[0]
+
+    def _legacy_local_json_files(self, source_root: Path) -> list[Path]:
+        """列出旧本地导出中的 JSON，兼容 utf8、database 和历史平铺目录。"""
+        roots: list[Path] = []
+        utf8_root = source_root / "utf8"
+        if utf8_root.is_dir():
+            roots.append(utf8_root)
+        roots.append(source_root)
+
+        files: list[Path] = []
+        seen: set[Path] = set()
+        for root in roots:
+            if not root.exists():
+                continue
+            for file_path in sorted(root.rglob("*.json"), key=lambda item: item.as_posix().casefold()):
+                resolved = file_path.resolve()
+                if resolved in seen or file_path.name == MIGRATION_REPORT_FILE:
+                    continue
+                seen.add(resolved)
+                files.append(file_path)
+        return files
+
+    def _legacy_logical_dump_path(self, source_name: str) -> Path | None:
+        """把旧 ParaTranz 文件名映射到 build/dump 下的新逻辑路径。"""
+        parts = [part for part in Path(self._normalize_remote_name(source_name)).parts if part not in {"", "."}]
+        if not parts:
+            return None
+        if parts[0].casefold() == "utf8":
+            parts = parts[1:]
+        if not parts:
+            return None
+
+        if self._is_legacy_dll_source(source_name):
+            return self._legacy_dll_logical_path(parts)
+        if parts[0] in {MAIN_GAME_DIR, DLC_GAME_DIR}:
+            return self._legacy_existing_dump_path(parts)
+        if parts[0] == DATABASE_DIR:
+            return self._legacy_database_path_from_parts(parts[1:])
+
+        asset_index = next((index for index, part in enumerate(parts) if _ASSET_TEXT_DIR_PATTERN.match(part)), None)
+        if asset_index is not None:
+            return self._legacy_database_path_from_parts(parts[asset_index:])
+        if parts[-1] == DLL_STRINGS_FILE and parts[0] in {MAIN_GAME_DIR, DLC_GAME_DIR}:
+            return Path(parts[0]) / DLL_STRINGS_FILE
+        return None
+
+    def _legacy_dll_logical_path(self, parts: list[str]) -> Path:
+        """把旧 DLL 文件夹映射到当前 MainGame/DLCGame 的 dll_strings.json。"""
+        lowered = [part.casefold() for part in parts]
+        filename = Path(parts[-1]).stem.casefold() if parts else ""
+        if any(part in {DLC_GAME_DIR.casefold(), "dlc"} or part.endswith("_dlc") for part in lowered) or "dlc" in filename:
+            return Path(DLC_GAME_DIR) / DLL_STRINGS_FILE
+        return Path(MAIN_GAME_DIR) / DLL_STRINGS_FILE
+
+    def _legacy_existing_dump_path(self, parts: list[str]) -> Path | None:
+        """兼容已经整理成 MainGame/DLCGame 的旧目录。"""
+        game_dir = parts[0]
+        if len(parts) >= 2 and parts[1] == DLL_STRINGS_FILE:
+            return Path(game_dir) / DLL_STRINGS_FILE
+        if len(parts) >= 3 and parts[1] == DATABASE_DIR:
+            clean_parts = [*parts[2:-1], self._clean_legacy_json_file_name(parts[-1])]
+            return Path(game_dir) / DATABASE_DIR / Path(*clean_parts)
+        return None
+
+    def _legacy_database_path_from_parts(self, parts: list[str]) -> Path | None:
+        """把 asset_XX_text 目录映射到 MainGame/DLCGame database 目录。"""
+        if len(parts) < 2 or not _ASSET_TEXT_DIR_PATTERN.match(parts[0]):
+            return None
+        asset_dir = parts[0]
+        game_dir = DLC_GAME_DIR if asset_dir.casefold().endswith("_dlc") else MAIN_GAME_DIR
+        target_asset_dir = asset_dir[:-4] if game_dir == DLC_GAME_DIR and asset_dir.casefold().endswith("_dlc") else asset_dir
+        clean_parts = [target_asset_dir, *parts[1:-1], self._clean_legacy_json_file_name(parts[-1])]
+        return Path(game_dir) / DATABASE_DIR / Path(*clean_parts)
+
+    def _clean_legacy_json_file_name(self, file_name: str) -> str:
+        """清理历史 CAB/hash 和数字后缀，只保留稳定 JSON 文件名。"""
+        path = Path(file_name)
+        stem = _CAB_SUFFIX_PATTERN.sub("", path.stem)
+        stem = _NUMBER_SUFFIX_PATTERN.sub("", stem)
+        return f"{stem}.json"
+
+    def _migration_target_files(self, dump_root: Path) -> list[Path]:
+        """只迁移 MainGame/DLCGame 里的 JSON，不处理 diff 目录。"""
+        files: list[Path] = []
+        for game_dir in (MAIN_GAME_DIR, DLC_GAME_DIR):
+            game_root = dump_root / game_dir
+            files.extend(self._json_files(game_root))
+        return sorted(files, key=lambda item: item.relative_to(dump_root).as_posix().casefold())
+
+    def _reset_migration_output(self, output_root: Path, dump_root: Path) -> None:
+        """重建 build/migrated，避免旧迁移产物残留。"""
+        resolved_output = output_root.resolve()
+        if resolved_output == dump_root.resolve():
+            raise ValueError("迁移输出目录不能和 build/dump 相同。")
+        if output_root.exists():
+            if len(resolved_output.parts) <= 2:
+                raise ValueError(f"拒绝清理过高层级目录：{output_root}")
+            shutil.rmtree(output_root)
+        output_root.mkdir(parents=True, exist_ok=True)
+
+    def _write_migration_report(self, target: Path, report: dict[str, Any]) -> None:
+        """写出迁移报告，方便人工检查重复文件和冲突译文。"""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+
+    def _report_path(self, path: Path) -> str:
+        """迁移报告里使用相对路径，避免写入本机绝对盘符。"""
+        resolved = path.resolve()
+        for base in (paths.root, Path.cwd()):
+            try:
+                return Path(os.path.relpath(resolved, base.resolve())).as_posix()
+            except (OSError, ValueError):
+                continue
+        return path.as_posix()
 
     def _iter_term_pages(self, *, project_id: int) -> Iterable[Page[ParatranzTerm]]:
         """按页迭代项目术语，供项目间迁移使用。"""

@@ -113,6 +113,32 @@ def cmd_build_dump(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_migrate_translations(args: argparse.Namespace) -> int:
+    """把旧 ParaTranz 译文迁移到当前 build/dump 新结构。"""
+    result = Paratranz().migrate_legacy_translations_to_dump(
+        source_root=Path(args.source_root) if args.source_root else None,
+        dump_root=Path(args.dump_root) if args.dump_root else None,
+        output_root=Path(args.output_root) if args.output_root else None,
+        source_project_id=args.source_project_id,
+        dry_run=args.dry_run,
+        show_progress=args.progress,
+    )
+    report = getattr(result, "report", {})
+    logger.success(
+        "{}旧译文迁移：{} 个文件，迁移 {} 条译文，未匹配 {} 条，重复逻辑文件 {} 组，冲突 {} 处。结果目录：{}",
+        "[dry-run] " if args.dry_run else "",
+        result.planned,
+        result.migrated_entries,
+        result.skipped,
+        len(report.get("duplicate_files", [])),
+        len(report.get("conflicts", [])),
+        report.get("output_root", args.output_root or "build/migrated"),
+    )
+    if not args.dry_run:
+        logger.info("迁移命令只生成本地文件，不会自动上传；请检查 build/migrated 后手动上传到 ParaTranz。")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建命令行解析器。
 
@@ -164,6 +190,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_dump.add_argument("--progress", action="store_true", help="显示构建进度条。")
     build_dump.set_defaults(func=cmd_build_dump)
+
+    migrate = _with_chinese_help(
+        subparsers.add_parser(
+            "迁移翻译",
+            aliases=["migrate-translations"],
+            help="把旧 ParaTranz 译文迁移到当前 build/dump 新结构，只生成本地 build/migrated。",
+            add_help=False,
+        )
+    )
+    migrate.add_argument("--source-root", help="旧 ParaTranz 本地导出目录；未传时默认使用 data/paratranz。")
+    migrate.add_argument("--dump-root", help="新提取的 build/dump 目录；未传时默认使用 build/dump。")
+    migrate.add_argument("--output-root", help="迁移结果输出目录；未传时默认使用 build/migrated。")
+    migrate.add_argument("--source-project-id", type=int, help="旧 ParaTranz 项目 ID；只读文件和译文，不会写入远端。")
+    migrate.add_argument("--dry-run", action="store_true", help="只生成迁移统计，不写入 build/migrated。")
+    migrate.add_argument("--progress", action="store_true", help="显示迁移进度条。")
+    migrate.set_defaults(func=cmd_migrate_translations)
 
     return parser
 

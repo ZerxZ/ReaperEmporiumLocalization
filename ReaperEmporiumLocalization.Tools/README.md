@@ -12,6 +12,7 @@ python main.py 安装包 data
 python main.py 下载包 --progress
 python main.py 拉取安装 --progress
 python main.py 构建差异
+python main.py 迁移翻译 --progress
 ```
 
 | 中文命令 | 英文别名 | 用途 |
@@ -21,6 +22,7 @@ python main.py 构建差异
 | `拉取安装` | `pull` | 先下载 ParaTranz 导出包，再安装到游戏目录。 |
 | `查看统计` | `stats` | 统计本地翻译包中的数据库和 DLL 词条数量。 |
 | `构建差异` | `build-dump` | 根据 MainGame/DLCGame 转储数据构建差异输出。 |
+| `迁移翻译` | `migrate-translations` | 把旧 ParaTranz 译文迁移到新 `build/dump` 结构。 |
 
 常用参数仍保留英文名称：
 
@@ -28,6 +30,7 @@ python main.py 构建差异
 - `--force`：忽略本地缓存，强制重新下载 ParaTranz 导出包。
 - `--game-root`：指定游戏根目录。
 - `--no-clear`：安装前不清理已有汉化 JSON。
+- `--dry-run`：只预览迁移统计，不写入迁移结果。
 
 ## 配置
 
@@ -115,3 +118,22 @@ build/dump/
 ```powershell
 python main.py 构建差异 --progress
 ```
+
+## 迁移旧 ParaTranz 译文
+
+`迁移翻译` 会读取旧 ParaTranz 导出或旧项目译文，把译文套到当前 `build/dump` 的新提取结构中，并写入：
+
+```text
+build/migrated/
+  MainGame/
+  DLCGame/
+  migration_report.json
+```
+
+默认读取 `data/paratranz` 和 `build/dump`：
+
+```powershell
+python main.py 迁移翻译 --progress
+```
+
+这个命令只生成本地文件，不会自动上传、创建、更新或删除 ParaTranz 远端文件。旧 `asset_XX_text_DLC` 目录会按当前新 dump 的 DLC 目录映射到 `DLCGame/database/asset_XX_text`；旧 `DLL/` 文件夹会对应当前的 `dll_strings.json`，其中纯数字旧 key 会按 `original` 精确迁移。重复旧文件会按词条合并择优，质量相同但译文不同的候选会写入 `migration_report.json` 的 `conflicts`。
