@@ -3,6 +3,7 @@ name = "reaperemporiumlocalization-tools"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "diff-match-patch>=20241021",
     "httpx==0.28.1",
     "loguru==0.7.3",
     "pydantic==2.13.3",

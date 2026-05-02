@@ -1,3 +1,5 @@
+"""配置、路径、日志和进度条等基础设施导出。"""
+
 from .configuration import Settings, settings
 from .exceptions import ConfigurationError, LocalizationToolError, SafePathError
 from .logging import logger

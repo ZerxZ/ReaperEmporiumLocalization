@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using BepInEx;
 using Mono.Cecil;
@@ -34,7 +33,8 @@ namespace ReaperEmporiumLocalization.Preload
             {
                 TranslationManager.Data.TryGetCategory("dll_strings", out dllCategory);
             }
-            Dictionary<string, ParatranzData> extractedData = new Dictionary<string, ParatranzData>();
+            List<ParatranzData> extractedData = new List<ParatranzData>();
+            Dictionary<string, int> methodStringIndexes = new Dictionary<string, int>();
 
             foreach (var module in assembly.Modules)
             {
@@ -59,22 +59,22 @@ namespace ReaperEmporiumLocalization.Preload
                                     instruction.Operand = trans;
                                 }
 
-                                // 导出的逻辑保持不变，依然需要给 Paratranz 生成一个唯一 Key
+                                // DLL 转储 key 使用 类名.方法名_索引，不再依赖易漂移的 IL 偏移。
                                 if (enableDump)
                                 {
-                                    string ilKey = $"{type.FullName}.{method.Name}_IL_{instruction.Offset:X4}";
-                                    if (!extractedData.ContainsKey(ilKey))
+                                    string methodKey = $"{type.FullName}.{method.Name}";
+                                    int stringIndex = methodStringIndexes.TryGetValue(methodKey, out int currentIndex) ? currentIndex : 0;
+                                    methodStringIndexes[methodKey] = stringIndex + 1;
+                                    string entryKey = $"{methodKey}_{stringIndex}";
+                                    string cleanText = rawText.Replace("\r\n", "\\n").Replace("\n", "\\n");
+                                    extractedData.Add(new ParatranzData
                                     {
-                                        string cleanText = rawText.Replace("\r\n", "\\n").Replace("\n", "\\n");
-                                        extractedData[ilKey] = new ParatranzData
-                                        {
-                                            Key = ilKey,
-                                            Original = cleanText,
-                                            Translation = "",
-                                            Stage = StageEnum.未翻译,
-                                            Context = "" 
-                                        };
-                                    }
+                                        Key = entryKey,
+                                        Original = cleanText,
+                                        Translation = "",
+                                        Stage = StageEnum.未翻译,
+                                        Context = ""
+                                    });
                                 }
                             }
                         }
@@ -84,10 +84,8 @@ namespace ReaperEmporiumLocalization.Preload
 
             if (enableDump)
             {
-                var list = extractedData.Values.OrderBy(d => d.Key).ToList();
-                
                 // 只有真的提取到了数据，才生成文件和 dump 文件夹
-                if (list.Count > 0)
+                if (extractedData.Count > 0)
                 {
                     // 获取文件即将被写入的目录 (localization/dump)
                     string dumpDirectory = Path.GetDirectoryName(dumpPath);
@@ -98,7 +96,7 @@ namespace ReaperEmporiumLocalization.Preload
                         Directory.CreateDirectory(dumpDirectory);
                     }
                     
-                    File.WriteAllText(dumpPath, JsonConvert.SerializeObject(list, Formatting.Indented), System.Text.Encoding.UTF8);
+                    File.WriteAllText(dumpPath, JsonConvert.SerializeObject(extractedData, Formatting.Indented), System.Text.Encoding.UTF8);
                 }
             }
         }

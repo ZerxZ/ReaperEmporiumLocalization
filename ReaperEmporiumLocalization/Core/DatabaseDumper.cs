@@ -34,15 +34,14 @@ namespace ReaperEmporiumLocalization.Core
                 if (string.IsNullOrEmpty(lines[i])) continue;
 
                 string[] cells = lines[i].Split('\t');
-                string rowId = cells.Length > 0 ? cells[0] : "UNKNOWN";
 
                 for (int j = 0; j < cells.Length; j++)
                 {
                     string cellText = cells[j];
                     if (!string.IsNullOrWhiteSpace(cellText) && JapaneseRegex.IsMatch(cellText))
                     {
-                        // 生成唯一 Key，仅供 Paratranz 网站做记忆库绑定使用
-                        string entryKey = $"{assetName}_{rowId}_{j}";
+                        // 数据库转储 key 只使用当前 JSON 文件内的递增索引：0, 1, 2...
+                        string entryKey = dumpList.Count.ToString();
                         string cleanOriginal = cellText.Replace("\r", "").Replace("\n", "\\n");
 
                         dumpList.Add(new ParatranzData

@@ -162,7 +162,7 @@ Discord 交流服务器：
 
 字段说明：
 
-- `key`：条目 ID。运行时实际匹配以 `original` 为准。
+- `key`：条目 ID。运行时实际匹配以 `original` 为准。数据库 Dump 使用当前 JSON 文件内的纯数字索引，如 `0`、`1`、`2`；DLL Dump 使用 `{类名}.{方法名}_{索引}`，如 `Game.Type.Method_0`。
 - `original`：日文原文，必须和游戏文本一致。
 - `translation`：译文，不能为空。
 - `stage`：翻译状态。只有 `stage >= 1` 的条目会被加载。
@@ -198,6 +198,8 @@ EnableDllDump = true
 ```text
 游戏根目录/localization/dump/dll_strings.json
 ```
+
+DLL Dump 的 `key` 规则为 `{类名}.{方法名}_{索引}`，索引从同一类名和方法名下的第一个日文 `ldstr` 开始按 `0, 1, 2...` 递增。
 
 ## 数据库/TSV 文本
 

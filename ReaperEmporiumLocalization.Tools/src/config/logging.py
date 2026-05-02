@@ -11,6 +11,11 @@ from .paths import paths
 
 
 def _tqdm_sink(message) -> None:
+    """把 loguru 日志写到 tqdm 兼容输出。
+
+    tqdm.write 可以避免日志打断进度条；如果进度条输出异常，则退回普通 stdout。
+    """
+
     text = str(message).rstrip("\n")
     if not text:
         return
@@ -21,6 +26,7 @@ def _tqdm_sink(message) -> None:
         sys.stdout.flush()
 
 
+# Windows 控制台在不同语言环境下容易出现编码问题，这里强制使用 UTF-8 输出。
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
 if hasattr(sys.stderr, "reconfigure"):
@@ -28,6 +34,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 paths.ensure_base_dirs()
 
+# loguru 默认 handler 会直接写 stderr；移除后统一走 tqdm 兼容输出和日志文件。
 _logger.remove()
 _logger.add(_tqdm_sink, format=settings.project.log_format, colorize=True, level=settings.project.log_level)
 _logger.add(

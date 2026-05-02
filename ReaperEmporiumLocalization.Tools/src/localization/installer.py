@@ -19,6 +19,8 @@ _NUMBER_SUFFIX_PATTERN = re.compile(r"_\d+$")
 
 @dataclass(slots=True)
 class InstallStats:
+    """安装/统计流程的汇总结果。"""
+
     packages: int = 0
     database_files: int = 0
     database_entries: int = 0
@@ -26,6 +28,7 @@ class InstallStats:
     written_files: int = 0
 
     def add(self, other: "InstallStats") -> None:
+        """把另一个统计结果合并进当前对象。"""
         self.packages += other.packages
         self.database_files += other.database_files
         self.database_entries += other.database_entries
@@ -34,6 +37,7 @@ class InstallStats:
 
 
 def summarize_translation_packages(input_roots: Iterable[Path | str]) -> InstallStats:
+    """扫描本地翻译包，只统计文件和词条数量，不写入游戏目录。"""
     package_roots = discover_translation_packages(input_roots)
     stats = InstallStats(packages=len(package_roots))
     for package_root in package_roots:
@@ -53,9 +57,16 @@ def install_translation_packages(
     clear: bool = True,
     show_progress: bool = False,
 ) -> InstallStats:
+    """把本地翻译包合并并安装到游戏目录。
+
+    翻译包可能来自 ParaTranz 导出、手工整理目录或 build-dump 输出。安装时会先
+    发现合法包目录，再按数据库类别和 DLL 原文分别合并，最后写成游戏插件读取
+    的运行时目录结构。
+    """
+
     package_roots = discover_translation_packages(input_roots)
     if not package_roots:
-        raise FileNotFoundError("No translation packages found.")
+        raise FileNotFoundError("未找到可安装的翻译包。")
 
     target_game_root = paths.require_game_root(game_root)
     localization_root = target_game_root / "localization"
@@ -70,7 +81,7 @@ def install_translation_packages(
     dll_by_original: dict[str, ParatranzData] = {}
     stats = InstallStats(packages=len(package_roots))
 
-    with ProgressBar(total=len(package_roots), enabled=show_progress, desc="Read packages", unit="pkg") as progress:
+    with ProgressBar(total=len(package_roots), enabled=show_progress, desc="读取翻译包", unit="包") as progress:
         for package_root in package_roots:
             _merge_package(package_root, database_by_category, dll_by_original, stats)
             progress.set_postfix_str(package_root.name)
@@ -80,7 +91,7 @@ def install_translation_packages(
     dll_root.mkdir(parents=True, exist_ok=True)
 
     categories = sorted(database_by_category)
-    with ProgressBar(total=len(categories), enabled=show_progress, desc="Write database", unit="file") as progress:
+    with ProgressBar(total=len(categories), enabled=show_progress, desc="写入数据库", unit="文件") as progress:
         for category in categories:
             entries = sorted(database_by_category[category].values(), key=lambda item: item.key or item.original)
             _write_paratranz_file(database_root / f"{category}.json", entries)
@@ -93,11 +104,17 @@ def install_translation_packages(
         _write_paratranz_file(dll_root / "dll_strings.json", entries)
         stats.written_files += 1
 
-    logger.info("Installed translations into {}", localization_root)
+    logger.info("已将翻译安装到 {}", localization_root)
     return stats
 
 
 def discover_translation_packages(input_roots: Iterable[Path | str]) -> list[Path]:
+    """从输入目录中发现翻译包根目录。
+
+    合法翻译包可以是本身包含 database/dll_strings 的目录，也可以是 ParaTranz
+    导出包里常见的 utf8 子目录。
+    """
+
     packages: list[Path] = []
     seen: set[Path] = set()
     for root_value in input_roots:
@@ -112,20 +129,23 @@ def discover_translation_packages(input_roots: Iterable[Path | str]) -> list[Pat
 
 
 def read_paratranz_file(file_path: Path) -> list[ParatranzData]:
+    """读取 ParaTranz JSON 文件，并校验为统一的 ParatranzData 列表。"""
     try:
         payload = json.loads(file_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON file: {file_path}") from exc
+        raise ValueError(f"无效的 JSON 文件：{file_path}") from exc
     return paratranz_data_list_adapter.validate_python(payload)
 
 
 def clean_category_name(file_path: Path) -> str:
+    """清理数据库文件名中的 CAB 后缀和数字后缀，得到稳定类别名。"""
     name = _CAB_SUFFIX_PATTERN.sub("", file_path.stem)
     name = _NUMBER_SUFFIX_PATTERN.sub("", name)
     return name
 
 
 def _candidate_packages(root: Path) -> list[Path]:
+    """列出某个输入路径下可能的翻译包目录。"""
     if root.is_file():
         return []
 
@@ -144,10 +164,12 @@ def _candidate_packages(root: Path) -> list[Path]:
 
 
 def _is_package_root(root: Path) -> bool:
+    """判断目录是否拥有翻译包的关键结构。"""
     return root.exists() and ((root / "database").is_dir() or _dll_file(root).is_file())
 
 
 def _database_files(package_root: Path) -> list[Path]:
+    """列出翻译包内所有数据库 JSON 文件。"""
     database_root = package_root / "database"
     if database_root.is_dir():
         return sorted(database_root.rglob("*.json"), key=lambda item: item.as_posix().casefold())
@@ -160,6 +182,12 @@ def _merge_package(
     dll_by_original: dict[str, ParatranzData],
     stats: InstallStats,
 ) -> None:
+    """把单个翻译包合并进内存索引。
+
+    数据库词条按清理后的类别名归组；DLL 字符串没有类别目录，因此按运行时原文
+    归并。重复词条交给 _put_best 选择质量更高的一条。
+    """
+
     for file_path in _database_files(package_root):
         category = clean_category_name(file_path)
         category_entries = database_by_category.setdefault(category, {})
@@ -178,6 +206,7 @@ def _merge_package(
 
 
 def _dll_file(package_root: Path) -> Path:
+    """兼容平铺和目录式两种 dll_strings.json 布局。"""
     flat_file = package_root / "dll_strings.json"
     if flat_file.exists():
         return flat_file
@@ -185,6 +214,7 @@ def _dll_file(package_root: Path) -> Path:
 
 
 def _put_best(target: dict[str, ParatranzData], entry: ParatranzData) -> None:
+    """按可用性和阶段选择最适合写入游戏运行时的翻译。"""
     original = entry.runtime_original
     if not original.strip():
         return
@@ -194,12 +224,14 @@ def _put_best(target: dict[str, ParatranzData], entry: ParatranzData) -> None:
 
 
 def _write_paratranz_file(target: Path, entries: list[ParatranzData]) -> None:
+    """以稳定 UTF-8/缩进格式写出 ParaTranz JSON。"""
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = [entry.model_dump(mode="json") for entry in entries]
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
 
 
 def _clear_target(target: Path, localization_root: Path) -> None:
+    """清理旧安装结果；删除前先确认目标仍在 localization 目录内部。"""
     if not target.exists():
         return
     paths.ensure_inside(target, localization_root)

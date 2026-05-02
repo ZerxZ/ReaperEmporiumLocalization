@@ -1,5 +1,55 @@
+"""本地翻译数据模型和 ParaTranz API 模型导出。"""
+
 from src.models.paratranz import ParatranzData, StageEnum, paratranz_data_list_adapter
+from src.models.paratranz_api import (
+    ApiModel,
+    BatchOperationResponse,
+    BatchResult,
+    BatchStringOperationRequest,
+    FileMetadataRequest,
+    FileUploadResult,
+    MigrationResult,
+    Page,
+    ParatranzArtifact,
+    ParatranzFile,
+    ParatranzJob,
+    ParatranzRevision,
+    ParatranzString,
+    ParatranzTerm,
+    ParatranzTermHistory,
+    ParatranzTinyFile,
+    RateLimitSettings,
+    StringWriteRequest,
+    SyncAction,
+    SyncPlan,
+    TermImportResult,
+    TermWriteRequest,
+)
 
-__all__ = ["ParatranzData", "StageEnum", "paratranz_data_list_adapter"]
-
-__all__ = ["StageEnum", "ParatranzData", "paratranz_data_list_adapter"]
+__all__ = [
+    "ApiModel",
+    "BatchOperationResponse",
+    "BatchResult",
+    "BatchStringOperationRequest",
+    "FileMetadataRequest",
+    "FileUploadResult",
+    "MigrationResult",
+    "Page",
+    "ParatranzArtifact",
+    "ParatranzData",
+    "ParatranzFile",
+    "ParatranzJob",
+    "ParatranzRevision",
+    "ParatranzString",
+    "ParatranzTerm",
+    "ParatranzTermHistory",
+    "ParatranzTinyFile",
+    "RateLimitSettings",
+    "StageEnum",
+    "StringWriteRequest",
+    "SyncAction",
+    "SyncPlan",
+    "TermImportResult",
+    "TermWriteRequest",
+    "paratranz_data_list_adapter",
+]

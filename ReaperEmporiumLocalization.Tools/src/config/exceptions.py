@@ -1,13 +1,13 @@
 class LocalizationToolError(Exception):
-    """Base exception for this helper project."""
+    """汉化辅助工具的基础异常。"""
 
 
 class ConfigurationError(LocalizationToolError):
-    """Raised when required local configuration is missing."""
+    """缺少必要本地配置时抛出，例如未设置游戏目录或 ParaTranz token。"""
 
 
 class SafePathError(LocalizationToolError):
-    """Raised when a filesystem operation would leave the expected root."""
+    """文件操作可能越过预期根目录时抛出，用于避免误删或误写。"""
 
 
 __all__ = ["ConfigurationError", "LocalizationToolError", "SafePathError"]
