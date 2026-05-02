@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from diff_match_patch import diff_match_patch
+from thefuzz import fuzz, process
 
 from src.config.logging import logger
 from src.config.paths import paths
@@ -24,6 +25,8 @@ DLL_STRINGS_FILE = "dll_strings.json"
 DMP_EQUAL = 0
 DMP_INSERT = 1
 DMP_DELETE = -1
+DATABASE_ORIGINAL_FUZZY_THRESHOLD = 85
+DATABASE_FUZZY_SEARCH_MAX_ENTRIES = 2000
 _DIFF_MATCH_PATCH = diff_match_patch()
 
 
@@ -42,6 +45,15 @@ class DumpBuildStats:
     dlc_dll_entries_written: int = 0
     diff_database_files_written: int = 0
     diff_dll_files_written: int = 0
+
+
+@dataclass(slots=True)
+class _EntryDiff:
+    """保存一条 DLC 差异及其匹配到的 MainGame 候选。"""
+
+    main_entry: ParatranzData | None
+    dlc_entry: ParatranzData
+    output_entry: ParatranzData
 
 
 def build_dump_diff(*, show_progress: bool = False) -> DumpBuildStats:
@@ -167,10 +179,12 @@ def _write_dlc_database_diff(
             dlc_entries = read_paratranz_file(dlc_file)
             read_entries += len(dlc_entries)
             main_file = main_database_root / relative
-            diff_entries = _diff_entries(read_paratranz_file(main_file) if main_file.exists() else [], dlc_entries)
+            main_entries = read_paratranz_file(main_file) if main_file.exists() else []
+            diff_pairs = _diff_entry_pairs(main_entries, dlc_entries)
+            diff_entries = [pair.output_entry for pair in diff_pairs]
             if diff_entries:
                 _write_paratranz_file(output_root / relative, diff_entries)
-                if _write_readable_json_diff(main_file, dlc_file, _diff_file_path(diff_output_root, relative)):
+                if _write_readable_database_diff(diff_pairs, _diff_file_path(diff_output_root, relative), main_file.as_posix(), dlc_file.as_posix()):
                     stats.diff_database_files_written += 1
                 stats.dlc_database_files_written += 1
                 stats.dlc_database_entries_written += len(diff_entries)
@@ -201,6 +215,20 @@ def _write_readable_json_diff(main_file: Path, dlc_file: Path, target_file: Path
     main_text = _normalized_paratranz_json_text(read_paratranz_file(main_file) if main_file.exists() else [])
     dlc_text = _normalized_paratranz_json_text(read_paratranz_file(dlc_file))
     diff_text = _format_readable_json_diff(main_text, dlc_text, main_file.as_posix(), dlc_file.as_posix())
+    if not diff_text:
+        return False
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_text(diff_text, encoding="utf-8", newline="\n")
+    return True
+
+
+def _write_readable_database_diff(diff_pairs: list[_EntryDiff], target_file: Path, from_label: str, to_label: str) -> bool:
+    """按数据库匹配结果写出差异文件，避免完整数组重排造成大段误导性 diff。"""
+    main_entries = [pair.main_entry for pair in diff_pairs if pair.main_entry is not None]
+    dlc_entries = [pair.output_entry for pair in diff_pairs]
+    main_text = _normalized_paratranz_json_text(main_entries)
+    dlc_text = _normalized_paratranz_json_text(dlc_entries)
+    diff_text = _format_readable_json_diff(main_text, dlc_text, from_label, to_label)
     if not diff_text:
         return False
     target_file.parent.mkdir(parents=True, exist_ok=True)
@@ -242,21 +270,140 @@ def _normalized_entry_json_text(
     entry: ParatranzData,
     *,
     key_normalizer: Callable[[str], str] | None = None,
+    ignore_key: bool = False,
 ) -> str:
     """把单条词条序列化为稳定文本，供 diff-match-patch 判断内容是否变化。"""
     payload = entry.model_dump(mode="json")
-    if key_normalizer is not None:
+    if ignore_key:
+        payload.pop("key", None)
+    elif key_normalizer is not None:
         payload["key"] = key_normalizer(entry.key)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+class _DatabaseEntryMatcher:
+    """数据库差异匹配器：fuzzy 只搜索尚未被匹配占用的 MainGame 词条。"""
+
+    def __init__(self, main_entries: list[ParatranzData], *, enable_fuzzy_search: bool = True) -> None:
+        self._main_entries = main_entries
+        self._enable_fuzzy_search = enable_fuzzy_search
+        self._used_entry_ids: set[int] = set()
+        self._by_original: dict[str, list[ParatranzData]] = {}
+        self._by_key: dict[str, list[ParatranzData]] = {}
+        for entry in main_entries:
+            original = _database_original_for_match(entry)
+            if original:
+                self._by_original.setdefault(original, []).append(entry)
+            self._by_key.setdefault(entry.key, []).append(entry)
+
+    def find(self, dlc_entry: ParatranzData, *, index: int | None = None, use_index: bool = False) -> ParatranzData | None:
+        """先精确 original，再等长索引，再对未占用 original 做 fuzzy，最后尝试非数字 key。"""
+        original = _database_original_for_match(dlc_entry)
+        if original:
+            exact_candidates = self._by_original.get(original, [])
+            exact = self._choose_candidate(exact_candidates, dlc_entry)
+            if exact is not None:
+                return self._reserve(exact)
+            if exact_candidates:
+                return None
+        if use_index and index is not None and index < len(self._main_entries):
+            indexed = self._main_entries[index]
+            if not self._is_used(indexed):
+                return self._reserve(indexed)
+        if original and self._enable_fuzzy_search:
+            fuzzy_candidate = self._find_fuzzy_original_candidate(original, dlc_entry)
+            if fuzzy_candidate is not None:
+                return self._reserve(fuzzy_candidate)
+        if not _is_numeric_database_key(dlc_entry.key):
+            key_candidate = self._choose_candidate(self._by_key.get(dlc_entry.key, []), dlc_entry)
+            if key_candidate is not None:
+                return self._reserve(key_candidate)
+        return None
+
+    def _find_fuzzy_original_candidate(self, original: str, dlc_entry: ParatranzData) -> ParatranzData | None:
+        original_choices = [
+            candidate_original
+            for candidate_original, candidates in self._by_original.items()
+            if self._choose_candidate(candidates, dlc_entry) is not None
+        ]
+        if not original_choices:
+            return None
+        match = process.extractOne(
+            original,
+            original_choices,
+            scorer=fuzz.ratio,
+        )
+        if match is None or match[1] < DATABASE_ORIGINAL_FUZZY_THRESHOLD:
+            return None
+        matched_original = match[0]
+        return self._choose_candidate(self._by_original.get(matched_original, []), dlc_entry)
+
+    def _choose_candidate(self, candidates: list[ParatranzData], dlc_entry: ParatranzData) -> ParatranzData | None:
+        available = [candidate for candidate in candidates if not self._is_used(candidate)]
+        if not available:
+            return None
+        return max(
+            available,
+            key=lambda candidate: (
+                candidate.context == dlc_entry.context,
+                fuzz.ratio(candidate.context, dlc_entry.context),
+                candidate.key == dlc_entry.key,
+            ),
+        )
+
+    def _is_used(self, entry: ParatranzData) -> bool:
+        return id(entry) in self._used_entry_ids
+
+    def _reserve(self, entry: ParatranzData) -> ParatranzData:
+        self._used_entry_ids.add(id(entry))
+        return entry
+
+
+def _database_original_for_match(entry: ParatranzData) -> str:
+    """把数据库 original 归一成适合精确和模糊搜索的文本。"""
+    return " ".join(entry.runtime_original.split()).casefold()
+
+
+def _database_output_entry(pair: _EntryDiff, next_new_key: int) -> tuple[ParatranzData, int]:
+    """已匹配词条改用 MainGame key；新增 DLC 词条按 MainGame 文件 key 顺序继续编号。"""
+    if pair.main_entry is not None:
+        return pair.dlc_entry.model_copy(update={"key": pair.main_entry.key}), next_new_key
+    return pair.dlc_entry.model_copy(update={"key": str(next_new_key)}), next_new_key + 1
+
+
+def _next_database_key_counter(entries: list[ParatranzData]) -> int:
+    """从 MainGame 当前文件顺序中最后一个数字 key 后继续计数。"""
+    for entry in reversed(entries):
+        if _is_numeric_database_key(entry.key):
+            return int(entry.key) + 1
+    return 0
+
+
+def _is_numeric_database_key(key: str) -> bool:
+    return key.isdecimal()
+
+
 def _diff_entries(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[ParatranzData]:
     """计算普通数据库词条差异。"""
-    return _diff_entries_by_patch(
+    return [pair.output_entry for pair in _diff_entry_pairs(main_entries, dlc_entries)]
+
+
+def _diff_entry_pairs(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[_EntryDiff]:
+    """计算普通数据库词条差异，并保留 MainGame 候选用于生成人类可读 diff。"""
+    use_index = len(main_entries) == len(dlc_entries)
+    matcher = _DatabaseEntryMatcher(
         main_entries,
-        dlc_entries,
-        match_key=lambda entry: (entry.key, entry.original),
+        enable_fuzzy_search=not use_index and len(main_entries) <= DATABASE_FUZZY_SEARCH_MAX_ENTRIES,
     )
+    changed_pairs: list[_EntryDiff] = []
+    next_new_key = _next_database_key_counter(main_entries)
+    for index, dlc_entry in enumerate(dlc_entries):
+        candidate = matcher.find(dlc_entry, index=index, use_index=use_index)
+        if candidate is None or _entries_differ_by_patch(candidate, dlc_entry, ignore_key=True):
+            pending_pair = _EntryDiff(candidate, dlc_entry, dlc_entry)
+            output_entry, next_new_key = _database_output_entry(pending_pair, next_new_key)
+            changed_pairs.append(_EntryDiff(candidate, dlc_entry, output_entry))
+    return changed_pairs
 
 
 def _diff_dll_entries(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[ParatranzData]:
@@ -291,11 +438,13 @@ def _diff_entries_by_patch(
 def _entries_differ_by_patch(
     main_entry: ParatranzData,
     dlc_entry: ParatranzData,
-    key_normalizer: Callable[[str], str] | None,
+    key_normalizer: Callable[[str], str] | None = None,
+    *,
+    ignore_key: bool = False,
 ) -> bool:
     """如果单条词条的 DMP diff 含有非相等片段，就认为内容变化。"""
-    main_text = _normalized_entry_json_text(main_entry, key_normalizer=key_normalizer)
-    dlc_text = _normalized_entry_json_text(dlc_entry, key_normalizer=key_normalizer)
+    main_text = _normalized_entry_json_text(main_entry, key_normalizer=key_normalizer, ignore_key=ignore_key)
+    dlc_text = _normalized_entry_json_text(dlc_entry, key_normalizer=key_normalizer, ignore_key=ignore_key)
     return any(operation != DMP_EQUAL for operation, _text in _DIFF_MATCH_PATCH.diff_main(main_text, dlc_text))
 
 

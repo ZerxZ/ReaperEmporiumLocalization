@@ -10,9 +10,12 @@ from src.localization import dump_builder
 from src.localization.dump_builder import (
     DumpBuildStats,
     build_dump_diff,
+    _DatabaseEntryMatcher,
+    _diff_entries,
     _write_dlc_database_diff,
     _write_dlc_dll_diff,
 )
+from src.models import ParatranzData
 
 
 class DumpBuilderDiffTests(unittest.TestCase):
@@ -56,14 +59,18 @@ class DumpBuilderDiffTests(unittest.TestCase):
                 [
                     self._entry("same", "Same", "same-translation", 1),
                     self._entry("changed", "Changed", "旧译文", 1),
+                    self._entry("2", "Key Drift", "drift-translation", 1),
+                    self._entry("9", "Hero entered shop.", "", 0),
                 ],
             )
             self._write_entries(
                 dlc_file,
                 [
-                    self._entry("same", "Same", "same-translation", 1),
-                    self._entry("changed", "Changed", "新译文", 1),
-                    self._entry("new", "New", "新增译文", 1),
+                    self._entry("100", "Same", "same-translation", 1),
+                    self._entry("101", "Changed", "新译文", 1),
+                    self._entry("102", "Key Drift", "drift-translation", 1),
+                    self._entry("103", "Hero entered the shop.", "", 0),
+                    self._entry("104", "Brand New", "新增译文", 1),
                 ],
             )
 
@@ -83,8 +90,8 @@ class DumpBuilderDiffTests(unittest.TestCase):
             diff_file_exists = diff_file.is_file()
             legacy_diff_exists = (diff_out / "db_Test.json").exists()
 
-        self.assertEqual((read_files, read_entries), (1, 3))
-        self.assertEqual([entry["key"] for entry in dlc_entries], ["changed", "new"])
+        self.assertEqual((read_files, read_entries), (1, 5))
+        self.assertEqual([entry["key"] for entry in dlc_entries], ["changed", "9", "10"])
         self.assertTrue(diff_file_exists)
         self.assertFalse(legacy_diff_exists)
         self.assertIn("--- ", diff_text)
@@ -92,8 +99,92 @@ class DumpBuilderDiffTests(unittest.TestCase):
         self.assertIn('-    "translation": "旧译文"', diff_text)
         self.assertIn('+    "translation": "新译文"', diff_text)
         self.assertIn('+    "translation": "新增译文"', diff_text)
+        self.assertNotIn('"key": "100"', diff_text)
+        self.assertNotIn('"key": "102"', diff_text)
         self.assertNotIn("%E6", diff_text)
         self.assertEqual(stats.diff_database_files_written, 1)
+
+    def test_database_diff_uses_array_count_before_index_matching(self) -> None:
+        main_entries = self._models(
+            [
+                self._entry("0", "Same", "same-translation", 1),
+                self._entry("1", "Changed original", "", 0),
+            ]
+        )
+        dlc_entries = self._models(
+            [
+                self._entry("100", "Same", "same-translation", 1),
+                self._entry("101", "Changed originals", "", 0),
+            ]
+        )
+
+        changed = _diff_entries(main_entries, dlc_entries)
+
+        self.assertEqual([entry.key for entry in changed], ["1"])
+
+    def test_database_matcher_uses_key_after_fuzzy_original(self) -> None:
+        main_entries = self._models(
+            [
+                self._entry("0", "Completely different text.", "", 0),
+                self._entry("9", "Hero entered shop.", "", 0),
+            ]
+        )
+        dlc_entry = ParatranzData.model_validate(self._entry("0", "Hero entered the shop.", "", 0))
+
+        candidate = _DatabaseEntryMatcher(main_entries).find(dlc_entry, index=None, use_index=False)
+
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.key, "9")
+
+    def test_database_matcher_uses_context_before_key_for_duplicate_original(self) -> None:
+        main_entries = self._models(
+            [
+                self._entry("0", "Same original", "", 0, "wrong context"),
+                self._entry("9", "Same original", "", 0, "right context"),
+            ]
+        )
+        dlc_entry = ParatranzData.model_validate(self._entry("0", "Same original", "", 0, "right context"))
+
+        candidate = _DatabaseEntryMatcher(main_entries).find(dlc_entry, index=None, use_index=False)
+
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.key, "9")
+
+    def test_database_fuzzy_does_not_reuse_already_matched_original(self) -> None:
+        main_entries = self._models(
+            [
+                self._entry("0", "ならずものＡ", "", 0),
+            ]
+        )
+        dlc_entries = self._models(
+            [
+                self._entry("96", "ならずものＡ", "", 0),
+                self._entry("228", "ならずものA", "", 0),
+            ]
+        )
+
+        changed = _diff_entries(main_entries, dlc_entries)
+
+        self.assertEqual([(entry.key, entry.original) for entry in changed], [("1", "ならずものA")])
+
+    def test_database_new_key_counter_follows_maingame_file_order(self) -> None:
+        main_entries = self._models(
+            [
+                self._entry("0", "First", "", 0),
+                self._entry("10", "Historical high key", "", 0),
+                self._entry("2", "Current tail", "", 0),
+            ]
+        )
+        dlc_entries = self._models(
+            [
+                self._entry("100", "Brand New", "", 0),
+                self._entry("101", "Another New", "", 0),
+            ]
+        )
+
+        changed = _diff_entries(main_entries, dlc_entries)
+
+        self.assertEqual([entry.key for entry in changed], ["3", "4"])
 
     def test_dll_diff_uses_dmp_filtering_and_writes_readable_dmp_diff_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -145,6 +236,9 @@ class DumpBuilderDiffTests(unittest.TestCase):
     def _write_entries(self, path: Path, entries: list[dict]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+
+    def _models(self, entries: list[dict]) -> list[ParatranzData]:
+        return [ParatranzData.model_validate(entry) for entry in entries]
 
 
 class _FakePaths:

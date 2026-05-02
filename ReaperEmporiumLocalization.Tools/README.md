@@ -104,8 +104,9 @@ build/dump/
 
 - 每次执行 `构建差异` 前都会删除并重建整个 `build` 目录，避免旧产物混入新结果。
 - `MainGame` 会完整复制。
-- `DLCGame` 的数据库文件只保留相对 `MainGame` 新增或不同的词条，词条变化由 `diff-match-patch` 对规范化后的单条 JSON 判断。
-- `diff` 会额外保存 `MainGame` 与 `DLCGame` 规范化 JSON 的可读行级差异文件，差异计算仍使用 `diff-match-patch`，中文会按 UTF-8 原文写出。
+- `DLCGame` 的数据库文件会先判断 JSON 数组数量是否对等；数据库词条差异以 `original` 为主，等长数组用索引辅助，原文轻微变化用 `thefuzz` 只在尚未匹配过的 MainGame 词条里搜索，避免重复复用同一条原文。
+- 已匹配到 MainGame 的 DLC 数据库词条会改用 MainGame 的 `key`；完全新增的 DLC 词条会按当前 MainGame 文件的 key 顺序，从文件顺序最后一个数字 `key` 后继续编号，再由 `diff-match-patch` 判断规范化单条 JSON 是否变化。
+- `diff` 会额外保存可读行级差异文件，数据库 diff 基于同一套差异匹配结果，只展示需要同步的词条；差异计算仍使用 `diff-match-patch`，中文会按 UTF-8 原文写出。
 - `diff/database/foo.json.diff` 对应原始 `database/foo.json`，`diff/dll_strings.json.diff` 对应 DLL 字符串文件。
 - DLC 的 `dll_strings.json` 会按 `{类名}.{方法名}_{索引}` key 和词条内容精确比较，不再兼容旧的 `_IL_` key 迁移规则。
 - 空的 DLC 差异文件会跳过。
