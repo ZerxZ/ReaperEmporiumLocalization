@@ -89,20 +89,48 @@ class DumpBuilderDiffTests(unittest.TestCase):
             diff_text = diff_file.read_text(encoding="utf-8")
             diff_file_exists = diff_file.is_file()
             legacy_diff_exists = (diff_out / "db_Test.json").exists()
+            temp_label = Path(temp_dir).as_posix()
 
         self.assertEqual((read_files, read_entries), (1, 5))
         self.assertEqual([entry["key"] for entry in dlc_entries], ["changed", "9", "10"])
         self.assertTrue(diff_file_exists)
         self.assertFalse(legacy_diff_exists)
-        self.assertIn("--- ", diff_text)
-        self.assertIn("+++ ", diff_text)
+        self.assertIn("--- MainGame/database/db_Test.json", diff_text)
+        self.assertIn("+++ DLCGame/database/db_Test.json", diff_text)
         self.assertIn('-    "translation": "旧译文"', diff_text)
         self.assertIn('+    "translation": "新译文"', diff_text)
         self.assertIn('+    "translation": "新增译文"', diff_text)
         self.assertNotIn('"key": "100"', diff_text)
         self.assertNotIn('"key": "102"', diff_text)
+        self.assertNotIn(temp_label, diff_text)
         self.assertNotIn("%E6", diff_text)
         self.assertEqual(stats.diff_database_files_written, 1)
+
+    def test_database_diff_preserves_nested_relative_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            main_db = root / "main" / "database"
+            dlc_db = root / "dlc" / "database"
+            dlc_out = root / "out" / "DLCGame" / "database"
+            diff_out = root / "out" / "diff" / "database"
+            main_file = main_db / "bundle_a" / "db_Test.json"
+            dlc_file = dlc_db / "bundle_a" / "db_Test.json"
+            self._write_entries(main_file, [self._entry("0", "Old", "", 0)])
+            self._write_entries(dlc_file, [self._entry("100", "New", "", 0)])
+
+            stats = DumpBuildStats()
+            _write_dlc_database_diff(main_db, dlc_db, dlc_out, diff_out, stats=stats, show_progress=False)
+
+            output_file = dlc_out / "bundle_a" / "db_Test.json"
+            diff_file = diff_out / "bundle_a" / "db_Test.json.diff"
+            diff_text = diff_file.read_text(encoding="utf-8")
+            output_exists = output_file.is_file()
+            diff_exists = diff_file.is_file()
+
+        self.assertTrue(output_exists)
+        self.assertTrue(diff_exists)
+        self.assertIn("--- MainGame/database/bundle_a/db_Test.json", diff_text)
+        self.assertIn("+++ DLCGame/database/bundle_a/db_Test.json", diff_text)
 
     def test_database_diff_uses_array_count_before_index_matching(self) -> None:
         main_entries = self._models(
@@ -222,6 +250,8 @@ class DumpBuilderDiffTests(unittest.TestCase):
         self.assertIn("+++ ", diff_text)
         self.assertIn('-    "translation": "旧对话"', diff_text)
         self.assertIn('+    "translation": "新对话"', diff_text)
+        self.assertIn("--- MainGame/dll_strings.json", diff_text)
+        self.assertIn("+++ DLCGame/dll_strings.json", diff_text)
         self.assertNotIn("%E6", diff_text)
 
     def _entry(self, key: str, original: str, translation: str, stage: int, context: str = "") -> dict:

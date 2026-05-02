@@ -284,10 +284,10 @@ cd ReaperEmporiumLocalization.Tools
 ```text
 ReaperEmporiumLocalization.Tools/data/0-DumpData/
   MainGame/
-    database/*.json
+    database/{bundleName}/*.json
     dll_strings.json
   DLCGame/
-    database/*.json
+    database/{bundleName}/*.json
     dll_strings.json
 ```
 
@@ -304,11 +304,12 @@ ReaperEmporiumLocalization.Tools/build/dump/
 
 - 每次构建前会删除并重建整个 `build` 目录，避免旧产物混入。
 - `MainGame` 输出完整 JSON，作为 DLC 差异判断的基准。
-- 数据库 JSON 的 `key` 只是转储文件里的顺序编号，不作为主要身份；匹配优先级以 `original` 为主。
+- 数据库 JSON 推荐路径为 `database/{bundleName}/{assetName}.json`；`key` 只是转储文件里的顺序编号，不作为主要身份，匹配优先级以 `original` 为主。
 - 数据库差异会先判断 MainGame/DLCGame 数组数量是否对等；等长时用相同索引辅助判断原文是否被修改。
 - 原文轻微变化时使用 `thefuzz` 做模糊匹配，但只会在尚未被精确匹配占用的 MainGame 词条里搜索，避免同一条 MainGame 原文被多个 DLC 词条复用。
 - 已匹配到 MainGame 的 DLC 数据库词条会改用 MainGame 的 `key`；完全新增的 DLC 词条会按当前 MainGame 文件顺序，从文件顺序里最后一个数字 `key` 后继续编号。
 - `diff/database/*.json.diff` 基于同一套匹配结果生成，只展示需要同步的词条，不再直接对完整数组做行级 diff，避免数组删减/重排造成大段误导性差异。
+- `.diff` 文件头使用 `MainGame/...` 和 `DLCGame/...` 相对路径，不写入本机绝对路径。
 - DLL 字符串使用 `{类名}.{方法名}_{索引}` 作为 `key`，差异判断按 `key + original` 精确匹配，不兼容旧 `_IL_` key 迁移规则。
 
 ## 源代码结构

@@ -43,7 +43,7 @@ PARATRANZ_TOKEN=
 
 ```text
 <游戏根目录>/localization/
-  database/*.json
+  database/{bundleName}/*.json
   dll_strings/dll_strings.json
 ```
 
@@ -53,7 +53,7 @@ PARATRANZ_TOKEN=
 
 `安装包` 会扫描输入目录中的翻译包，例如 `data/本体解包`、`data/DLC解包`，然后：
 
-- 合并 `database/*.json`，同类数据库文件按词条质量保留最优翻译。
+- 合并 `database/**/*.json`，保留 `database` 下的 bundle 相对目录，同一路径内按词条质量保留最优翻译。
 - 合并 `dll_strings.json`，按原文去重并保留最优翻译。
 - 写入游戏运行时需要的 `localization/database` 和 `localization/dll_strings`。
 
@@ -78,10 +78,10 @@ python main.py 拉取安装 --force --progress
 ```text
 data/0-DumpData/
   MainGame/
-    database/*.json
+    database/{bundleName}/*.json
     dll_strings.json
   DLCGame/
-    database/*.json
+    database/{bundleName}/*.json
     dll_strings.json
 ```
 
@@ -90,13 +90,13 @@ data/0-DumpData/
 ```text
 build/dump/
   MainGame/
-    database/*.json
+    database/{bundleName}/*.json
     dll_strings.json
   DLCGame/
-    database/*.json
+    database/{bundleName}/*.json
     dll_strings.json
   diff/
-    database/*.json.diff
+    database/{bundleName}/*.json.diff
     dll_strings.json.diff
 ```
 
@@ -107,7 +107,8 @@ build/dump/
 - `DLCGame` 的数据库文件会先判断 JSON 数组数量是否对等；数据库词条差异以 `original` 为主，等长数组用索引辅助，原文轻微变化用 `thefuzz` 只在尚未匹配过的 MainGame 词条里搜索，避免重复复用同一条原文。
 - 已匹配到 MainGame 的 DLC 数据库词条会改用 MainGame 的 `key`；完全新增的 DLC 词条会按当前 MainGame 文件的 key 顺序，从文件顺序最后一个数字 `key` 后继续编号，再由 `diff-match-patch` 判断规范化单条 JSON 是否变化。
 - `diff` 会额外保存可读行级差异文件，数据库 diff 基于同一套差异匹配结果，只展示需要同步的词条；差异计算仍使用 `diff-match-patch`，中文会按 UTF-8 原文写出。
-- `diff/database/foo.json.diff` 对应原始 `database/foo.json`，`diff/dll_strings.json.diff` 对应 DLL 字符串文件。
+- `.diff` 文件头使用相对路径，例如 `--- MainGame/database/bundle/foo.json` 和 `+++ DLCGame/database/bundle/foo.json`，不会写入本机绝对路径。
+- `diff/database/bundle/foo.json.diff` 对应原始 `database/bundle/foo.json`，`diff/dll_strings.json.diff` 对应 DLL 字符串文件。
 - DLC 的 `dll_strings.json` 会按 `{类名}.{方法名}_{索引}` key 和词条内容精确比较，不再兼容旧的 `_IL_` key 迁移规则。
 - 空的 DLC 差异文件会跳过。
 

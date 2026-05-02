@@ -144,6 +144,15 @@ def clean_category_name(file_path: Path) -> str:
     return name
 
 
+def _database_category_name(file_path: Path, database_root: Path) -> str:
+    """保留 database 下的相对目录，只清理 JSON 文件名本身。"""
+    relative = file_path.relative_to(database_root)
+    clean_name = clean_category_name(relative)
+    if relative.parent == Path("."):
+        return clean_name
+    return (relative.parent / clean_name).as_posix()
+
+
 def _candidate_packages(root: Path) -> list[Path]:
     """列出某个输入路径下可能的翻译包目录。"""
     if root.is_file():
@@ -188,8 +197,9 @@ def _merge_package(
     归并。重复词条交给 _put_best 选择质量更高的一条。
     """
 
+    database_root = package_root / "database"
     for file_path in _database_files(package_root):
-        category = clean_category_name(file_path)
+        category = _database_category_name(file_path, database_root)
         category_entries = database_by_category.setdefault(category, {})
         entries = read_paratranz_file(file_path)
         stats.database_files += 1

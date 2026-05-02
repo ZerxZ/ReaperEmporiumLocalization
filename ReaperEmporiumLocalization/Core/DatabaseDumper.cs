@@ -16,8 +16,8 @@ namespace ReaperEmporiumLocalization.Core
         {
             if (string.IsNullOrEmpty(text)) return;
 
-            // 🎯 核心修复：在此处加上 "database" 层级，保持与读取目录的绝对对称
-            string dumpDir = Path.Combine(Paths.GameRootPath, "localization", "dump", "database");
+            // 数据库转储必须保留 bundleName 层级，保持与运行时 database/{bundleName}/{assetName} 对称。
+            string dumpDir = Path.Combine(Paths.GameRootPath, "localization", "dump", "database", bundleName);
             if (!Directory.Exists(dumpDir)) Directory.CreateDirectory(dumpDir);
 
             // 导出的文件名绝对纯净，如 db_EventInfo.json
@@ -27,6 +27,7 @@ namespace ReaperEmporiumLocalization.Core
             if (File.Exists(dumpPath)) return;
 
             List<ParatranzData> dumpList = new List<ParatranzData>();
+            HashSet<string> seenOriginals = new HashSet<string>();
             string[] lines = text.Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None);
 
             for (int i = 0; i < lines.Length; i++)
@@ -40,9 +41,11 @@ namespace ReaperEmporiumLocalization.Core
                     string cellText = cells[j];
                     if (!string.IsNullOrWhiteSpace(cellText) && JapaneseRegex.IsMatch(cellText))
                     {
+                        string cleanOriginal = cellText.Replace("\r", "").Replace("\n", "\\n");
+                        if (!seenOriginals.Add(cleanOriginal)) continue;
+
                         // 数据库转储 key 只使用当前 JSON 文件内的递增索引：0, 1, 2...
                         string entryKey = dumpList.Count.ToString();
-                        string cleanOriginal = cellText.Replace("\r", "").Replace("\n", "\\n");
 
                         dumpList.Add(new ParatranzData
                         {
@@ -60,7 +63,7 @@ namespace ReaperEmporiumLocalization.Core
             {
                 File.WriteAllText(dumpPath, JsonConvert.SerializeObject(dumpList, Formatting.Indented), System.Text.Encoding.UTF8);
                 // 日志也同步修改，方便在控制台确认层级
-                Debug.Log($"[REL.Dumper] 成功提取表格并保存至: database/{assetName}.json");
+                Debug.Log($"[REL.Dumper] 成功提取表格并保存至: database/{bundleName}/{assetName}.json");
             }
         }
     }

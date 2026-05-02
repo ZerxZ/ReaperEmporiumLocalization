@@ -184,7 +184,12 @@ def _write_dlc_database_diff(
             diff_entries = [pair.output_entry for pair in diff_pairs]
             if diff_entries:
                 _write_paratranz_file(output_root / relative, diff_entries)
-                if _write_readable_database_diff(diff_pairs, _diff_file_path(diff_output_root, relative), main_file.as_posix(), dlc_file.as_posix()):
+                if _write_readable_database_diff(
+                    diff_pairs,
+                    _diff_file_path(diff_output_root, relative),
+                    f"{MAIN_GAME_DIR}/{DATABASE_DIR}/{relative.as_posix()}",
+                    f"{DLC_GAME_DIR}/{DATABASE_DIR}/{relative.as_posix()}",
+                ):
                     stats.diff_database_files_written += 1
                 stats.dlc_database_files_written += 1
                 stats.dlc_database_entries_written += len(diff_entries)
@@ -201,7 +206,15 @@ def _write_dlc_dll_diff(main_file: Path, dlc_file: Path, output_file: Path, diff
     diff_files_written = 0
     if diff_entries:
         _write_paratranz_file(output_file, diff_entries)
-        diff_files_written = int(_write_readable_json_diff(main_file, dlc_file, diff_output_file))
+        diff_files_written = int(
+            _write_readable_json_diff(
+                main_file,
+                dlc_file,
+                diff_output_file,
+                from_label=f"{MAIN_GAME_DIR}/{DLL_STRINGS_FILE}",
+                to_label=f"{DLC_GAME_DIR}/{DLL_STRINGS_FILE}",
+            )
+        )
     return len(dlc_entries), len(diff_entries), diff_files_written
 
 
@@ -210,11 +223,23 @@ def _diff_file_path(root: Path, relative: Path) -> Path:
     return root / relative.with_name(f"{relative.name}.diff")
 
 
-def _write_readable_json_diff(main_file: Path, dlc_file: Path, target_file: Path) -> bool:
+def _write_readable_json_diff(
+    main_file: Path,
+    dlc_file: Path,
+    target_file: Path,
+    *,
+    from_label: str | None = None,
+    to_label: str | None = None,
+) -> bool:
     """使用 diff-match-patch 写出可直接阅读的规范化 JSON 行级差异。"""
     main_text = _normalized_paratranz_json_text(read_paratranz_file(main_file) if main_file.exists() else [])
     dlc_text = _normalized_paratranz_json_text(read_paratranz_file(dlc_file))
-    diff_text = _format_readable_json_diff(main_text, dlc_text, main_file.as_posix(), dlc_file.as_posix())
+    diff_text = _format_readable_json_diff(
+        main_text,
+        dlc_text,
+        from_label or main_file.as_posix(),
+        to_label or dlc_file.as_posix(),
+    )
     if not diff_text:
         return False
     target_file.parent.mkdir(parents=True, exist_ok=True)

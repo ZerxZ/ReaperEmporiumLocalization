@@ -218,6 +218,34 @@ class ParatranzApiTests(unittest.TestCase):
         self.assertEqual(dll[0]["translation"], "运行")
         self.assertEqual(dll[0]["stage"], 1)
 
+    def test_migrate_local_translations_preserves_nested_database_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            old_root = root / "old"
+            new_root = root / "new"
+            output_root = root / "out"
+            self._write_entries(
+                old_root / "database" / "bundle_a" / "db_Test.json",
+                [{"key": "0", "original": "Hello", "translation": "Ni hao", "stage": 1, "context": ""}],
+            )
+            self._write_entries(
+                new_root / "database" / "bundle_a" / "db_Test.json",
+                [{"key": "0", "original": "Hello", "translation": "", "stage": 0, "context": ""}],
+            )
+
+            api = Paratranz(project_id=123, token="secret", rate_limit=RateLimitSettings(requests_per_second=1000))
+            result = api.migrate_local_translations(old_root, new_root, output_root, dry_run=False)
+            output_file = output_root / "database" / "bundle_a" / "db_Test.json"
+            flat_file = output_root / "database" / "db_Test.json"
+            database = json.loads(output_file.read_text(encoding="utf-8"))
+            output_exists = output_file.is_file()
+            flat_exists = flat_file.exists()
+
+        self.assertEqual(result.migrated_entries, 1)
+        self.assertTrue(output_exists)
+        self.assertFalse(flat_exists)
+        self.assertEqual(database[0]["translation"], "Ni hao")
+
     def test_migrate_local_translations_does_not_compat_old_il_dll_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
