@@ -6,6 +6,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from src.config.logging import logger
 from src.config.paths import paths
@@ -34,6 +35,17 @@ class InstallStats:
         self.database_entries += other.database_entries
         self.dll_entries += other.dll_entries
         self.written_files += other.written_files
+
+
+@dataclass(slots=True)
+class PackageStats:
+    """最终打包流程的输出统计。"""
+
+    database_files: int = 0
+    database_entries: int = 0
+    dll_entries: int = 0
+    written_files: int = 0
+    zip_path: Path | None = None
 
 
 def summarize_translation_packages(input_roots: Iterable[Path | str]) -> InstallStats:
@@ -105,6 +117,59 @@ def install_translation_packages(
         stats.written_files += 1
 
     logger.info("已将翻译安装到 {}", localization_root)
+    return stats
+
+
+def package_final_localization(
+    source_root: Path | str | None = None,
+    *,
+    output_root: Path | str | None = None,
+    zip_path: Path | str | None = None,
+    create_zip: bool = True,
+    show_progress: bool = False,
+) -> PackageStats:
+    """把 MainGame/DLCGame 翻译包合并成游戏运行时 localization 目录。
+
+    默认输入为 build/migrated；如果不需要旧译文迁移，也可以把 source_root 指向
+    build/dump。输出目录本身就是 localization 目录，zip 内部固定使用
+    localization/ 前缀，方便直接解压到游戏根目录。
+    """
+
+    source = Path(source_root) if source_root is not None else paths.root / "build" / "migrated"
+    output = Path(output_root) if output_root is not None else paths.root / "build" / "package" / "localization"
+    archive = Path(zip_path) if zip_path is not None else paths.root / "build" / "package" / "ReaperEmporiumLocalization-localization.zip"
+
+    main_root = source / "MainGame"
+    dlc_root = source / "DLCGame"
+    if not main_root.is_dir():
+        raise FileNotFoundError(f"MainGame 目录不存在：{main_root}")
+    if not dlc_root.is_dir():
+        raise FileNotFoundError(f"DLCGame 目录不存在：{dlc_root}")
+    if output.resolve() == source.resolve():
+        raise ValueError("最终打包输出目录不能和输入目录相同。")
+
+    _reset_output_dir(output)
+    stats = PackageStats()
+    stats.database_files, stats.database_entries = _package_database_tree(
+        main_root / "database",
+        dlc_root / "database",
+        output / "database",
+        show_progress=show_progress,
+    )
+    stats.written_files += stats.database_files
+    stats.dll_entries = _package_dll_strings(
+        main_root / "dll_strings.json",
+        dlc_root / "dll_strings.json",
+        output / "dll_strings" / "dll_strings.json",
+    )
+    if stats.dll_entries:
+        stats.written_files += 1
+
+    if create_zip:
+        _write_localization_zip(output, archive)
+        stats.zip_path = archive
+
+    logger.info("已生成最终本地化包：{}", output)
     return stats
 
 
@@ -233,6 +298,90 @@ def _put_best(target: dict[str, ParatranzData], entry: ParatranzData) -> None:
         target[original] = entry
 
 
+def _package_database_tree(
+    main_database_root: Path,
+    dlc_database_root: Path,
+    output_root: Path,
+    *,
+    show_progress: bool,
+) -> tuple[int, int]:
+    """按 database 相对路径合并 MainGame 完整包和 DLCGame 差异包。"""
+    relative_files = sorted(
+        {
+            file_path.relative_to(root)
+            for root in (main_database_root, dlc_database_root)
+            if root.exists()
+            for file_path in root.rglob("*.json")
+        },
+        key=lambda item: item.as_posix().casefold(),
+    )
+    entry_count = 0
+    with ProgressBar(total=len(relative_files), enabled=show_progress, desc="合并数据库", unit="文件") as progress:
+        for relative in relative_files:
+            main_file = main_database_root / relative
+            dlc_file = dlc_database_root / relative
+            entries = _merge_database_entries(
+                read_paratranz_file(main_file) if main_file.exists() else [],
+                read_paratranz_file(dlc_file) if dlc_file.exists() else [],
+            )
+            entry_count += len(entries)
+            _write_paratranz_file(output_root / relative, entries)
+            progress.set_postfix_str(relative.as_posix())
+            progress.update()
+    return len(relative_files), entry_count
+
+
+def _merge_database_entries(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[ParatranzData]:
+    """数据库以原文为身份，DLC 同原文覆盖 MainGame，新原文追加。"""
+    merged: dict[str, ParatranzData] = {}
+    for entry in main_entries:
+        merged.setdefault(entry.runtime_original, entry)
+    for entry in dlc_entries:
+        merged[entry.runtime_original] = entry
+    return list(merged.values())
+
+
+def _package_dll_strings(main_file: Path, dlc_file: Path, output_file: Path) -> int:
+    """把 MainGame/DLCGame DLL 字符串合并成运行时唯一 dll_strings.json。"""
+    candidates: dict[str, ParatranzData] = {}
+    source_priority: dict[str, int] = {}
+    for priority, file_path in ((0, main_file), (1, dlc_file)):
+        if not file_path.exists():
+            continue
+        for entry in read_paratranz_file(file_path):
+            original = entry.runtime_original
+            current = candidates.get(original)
+            current_priority = source_priority.get(original, -1)
+            if current is None or (priority, entry.quality_rank()) > (current_priority, current.quality_rank()):
+                candidates[original] = entry
+                source_priority[original] = priority
+    entries = list(candidates.values())
+    _write_paratranz_file(output_file, entries)
+    return len(entries)
+
+
+def _reset_output_dir(output: Path) -> None:
+    """重建最终打包输出目录，避免旧产物混入。"""
+    if output.exists():
+        if len(output.resolve().parts) <= 2:
+            raise ValueError(f"拒绝清理过高层级目录：{output}")
+        shutil.rmtree(output)
+    output.mkdir(parents=True, exist_ok=True)
+
+
+def _write_localization_zip(localization_root: Path, zip_path: Path) -> None:
+    """写出只包含 localization/ 前缀的 zip。"""
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    if zip_path.exists():
+        zip_path.unlink()
+    files = sorted(localization_root.rglob("*"), key=lambda item: item.relative_to(localization_root).as_posix().casefold())
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as archive:
+        for file_path in files:
+            if file_path.is_file():
+                archive_name = (Path("localization") / file_path.relative_to(localization_root)).as_posix()
+                archive.write(file_path, archive_name)
+
+
 def _write_paratranz_file(target: Path, entries: list[ParatranzData]) -> None:
     """以稳定 UTF-8/缩进格式写出 ParaTranz JSON。"""
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -250,9 +399,11 @@ def _clear_target(target: Path, localization_root: Path) -> None:
 
 __all__ = [
     "InstallStats",
+    "PackageStats",
     "clean_category_name",
     "discover_translation_packages",
     "install_translation_packages",
+    "package_final_localization",
     "read_paratranz_file",
     "summarize_translation_packages",
 ]

@@ -13,6 +13,7 @@ python main.py 下载包 --progress
 python main.py 拉取安装 --progress
 python main.py 构建差异
 python main.py 迁移翻译 --progress
+python main.py 最终打包 --progress
 ```
 
 | 中文命令 | 英文别名 | 用途 |
@@ -23,6 +24,7 @@ python main.py 迁移翻译 --progress
 | `查看统计` | `stats` | 统计本地翻译包中的数据库和 DLL 词条数量。 |
 | `构建差异` | `build-dump` | 根据 MainGame/DLCGame 转储数据构建差异输出。 |
 | `迁移翻译` | `migrate-translations` | 把旧 ParaTranz 译文迁移到新 `build/dump` 结构。 |
+| `最终打包` | `package-final` | 合并 `MainGame`/`DLCGame`，生成游戏运行时 `localization` 目录和发布 zip。 |
 
 常用参数仍保留英文名称：
 
@@ -137,3 +139,29 @@ python main.py 迁移翻译 --progress
 ```
 
 这个命令只生成本地文件，不会自动上传、创建、更新或删除 ParaTranz 远端文件。旧 `asset_XX_text_DLC` 目录会按当前新 dump 的 DLC 目录映射到 `DLCGame/database/asset_XX_text`；旧 `DLL/` 文件夹会对应当前的 `dll_strings.json`，其中纯数字旧 key 会按 `original` 精确迁移。重复旧文件会按词条合并择优，质量相同但译文不同的候选会写入 `migration_report.json` 的 `conflicts`。
+
+## 最终打包
+
+`最终打包` 默认读取 `build/migrated`，把 `MainGame` 与 `DLCGame` 合并为游戏插件运行时需要的 `localization` 结构，并同时生成 zip：
+
+```text
+build/package/
+  localization/
+    database/{bundleName}/*.json
+    dll_strings/dll_strings.json
+  ReaperEmporiumLocalization-localization.zip
+```
+
+推荐流程是先执行 `构建差异`，需要套用旧 ParaTranz 译文时再执行 `迁移翻译`，最后执行：
+
+```powershell
+python main.py 最终打包 --progress
+```
+
+合并时，同一路径数据库 JSON 会按 `original` 去重：先放入 `MainGame` 词条，`DLCGame` 同原文词条覆盖本体译文，DLC 新原文追加。DLL 会合并成单个 `localization/dll_strings/dll_strings.json`，同原文优先使用 DLC，再按 `stage/translation` 质量择优。zip 内只包含 `localization/` 目录，可直接解压到游戏根目录。
+
+如果想跳过迁移，直接使用当前差异构建产物，也可以指定：
+
+```powershell
+python main.py 最终打包 --source-root build/dump --progress
+```

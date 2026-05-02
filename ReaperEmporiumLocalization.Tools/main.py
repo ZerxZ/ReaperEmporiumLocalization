@@ -5,7 +5,7 @@ from pathlib import Path
 
 from src.config import logger, paths
 from src.localization.dump_builder import build_dump_diff
-from src.localization.installer import install_translation_packages, summarize_translation_packages
+from src.localization.installer import install_translation_packages, package_final_localization, summarize_translation_packages
 from src.localization.paratranz import Paratranz
 
 
@@ -139,6 +139,26 @@ def cmd_migrate_translations(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_package_final(args: argparse.Namespace) -> int:
+    """把 MainGame/DLCGame 合并为游戏运行时 localization 包。"""
+    stats = package_final_localization(
+        source_root=Path(args.source_root) if args.source_root else None,
+        output_root=Path(args.output_root) if args.output_root else None,
+        zip_path=Path(args.zip_path) if args.zip_path else None,
+        create_zip=not args.no_zip,
+        show_progress=args.progress,
+    )
+    logger.success(
+        "已生成最终本地化包：{} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条，{} 个输出 JSON{}",
+        stats.database_files,
+        stats.database_entries,
+        stats.dll_entries,
+        stats.written_files,
+        f"，zip：{stats.zip_path}" if stats.zip_path else "",
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构建命令行解析器。
 
@@ -206,6 +226,21 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--dry-run", action="store_true", help="只生成迁移统计，不写入 build/migrated。")
     migrate.add_argument("--progress", action="store_true", help="显示迁移进度条。")
     migrate.set_defaults(func=cmd_migrate_translations)
+
+    package_final = _with_chinese_help(
+        subparsers.add_parser(
+            "最终打包",
+            aliases=["package-final"],
+            help="把 MainGame/DLCGame 合并为运行时 localization 目录，并生成发布 zip。",
+            add_help=False,
+        )
+    )
+    package_final.add_argument("--source-root", help="包含 MainGame/DLCGame 的目录；未传时默认使用 build/migrated。")
+    package_final.add_argument("--output-root", help="输出 localization 目录；未传时默认使用 build/package/localization。")
+    package_final.add_argument("--zip-path", help="输出 zip 路径；未传时默认使用 build/package/ReaperEmporiumLocalization-localization.zip。")
+    package_final.add_argument("--no-zip", action="store_true", help="只生成 localization 目录，不生成 zip。")
+    package_final.add_argument("--progress", action="store_true", help="显示打包进度条。")
+    package_final.set_defaults(func=cmd_package_final)
 
     return parser
 
