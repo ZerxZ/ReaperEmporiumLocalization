@@ -106,6 +106,86 @@ class ParatranzApiTests(unittest.TestCase):
         self.assertEqual([request.method for request in requests], ["GET", "POST", "GET", "POST"])
         self.assertEqual(requests[1].url.path, "/api/projects/123/terms")
 
+    def test_migrate_terms_to_project_dry_run_only_reads_source_terms(self) -> None:
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            self.assertEqual(request.method, "GET")
+            return httpx.Response(
+                200,
+                json={
+                    "page": 1,
+                    "pageSize": 100,
+                    "rowCount": 2,
+                    "pageCount": 1,
+                    "results": [
+                        {
+                            "id": 1,
+                            "term": "apple",
+                            "translation": "苹果",
+                            "variants": None,
+                            "updatedBy": {"id": 49026, "username": "tester"},
+                        },
+                        {"id": 2, "term": "banana", "translation": "香蕉", "variants": ["banana"], "caseSensitive": True},
+                    ],
+                },
+            )
+
+        api = Paratranz(
+            httpx.Client(transport=httpx.MockTransport(handler)),
+            project_id=123,
+            token="secret",
+            rate_limit=RateLimitSettings(requests_per_second=1000),
+        )
+
+        result = api.migrate_terms_to_project(source_project_id=999, dry_run=True)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].url.path, "/api/projects/999/terms")
+        self.assertEqual(result.planned, 1)
+        self.assertEqual(len(result.actions[0].metadata["terms"]), 2)
+        self.assertEqual(result.actions[0].metadata["terms"][0]["variants"], [])
+        self.assertNotIn("updatedBy", result.actions[0].metadata["terms"][0])
+        self.assertNotIn("id", result.actions[0].metadata["terms"][0])
+        self.assertEqual(result.actions[0].metadata["terms"][1]["caseSensitive"], True)
+        self.assertEqual(result.migrated_entries, 0)
+
+    def test_migrate_terms_to_project_execute_imports_into_target_project(self) -> None:
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.method == "GET":
+                return httpx.Response(
+                    200,
+                    json={
+                        "page": 1,
+                        "pageSize": 100,
+                        "rowCount": 1,
+                        "pageCount": 1,
+                        "results": [{"id": 3, "term": "orange", "translation": "橙子", "note": "fruit"}],
+                    },
+                )
+            if request.method == "PUT":
+                self.assertEqual(request.url.path, "/api/projects/456/terms")
+                return httpx.Response(200, json={"inserted": 1, "updated": 0, "deleted": 0})
+            return httpx.Response(404, json={"message": "not found"})
+
+        api = Paratranz(
+            httpx.Client(transport=httpx.MockTransport(handler)),
+            project_id=123,
+            token="secret",
+            rate_limit=RateLimitSettings(requests_per_second=1000),
+        )
+
+        result = api.migrate_terms_to_project(source_project_id=999, target_project_id=456, dry_run=False)
+
+        self.assertEqual([request.method for request in requests], ["GET", "PUT"])
+        self.assertEqual(result.succeeded, 1)
+        self.assertEqual(result.failed, 0)
+        self.assertEqual(result.migrated_entries, 1)
+
     def test_429_retries_with_retry_after(self) -> None:
         sleeps: list[float] = []
         requests: list[httpx.Request] = []

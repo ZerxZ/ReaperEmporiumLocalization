@@ -32,9 +32,18 @@ namespace ReaperEmporiumLocalization
             
             // 启动 Database 拦截
             Harmony.CreateAndPatchAll(typeof(Patchers.DatabaseHook));
-            
-            // 如果启用了字体替换，取消下面的注释
-            // Harmony.CreateAndPatchAll(typeof(Patchers.FontHook)); 
+
+            if (LocalizationConfig.EnableFontReplacement.Value)
+            {
+                FontManager.InitFont();
+                Harmony.CreateAndPatchAll(typeof(Patchers.FontHook));
+                int patchedTexts = Patchers.FontHook.RefreshAllTexts();
+                Logger.LogInfo($"[REL] 字体替换已启用，加载 {FontManager.ReplacementRules.Count} 条规则，已刷新 {patchedTexts} 个文本组件。");
+            }
+            else
+            {
+                Logger.LogInfo("[REL] 字体替换未启用，跳过 FontHook 挂载。");
+            }
 
             Logger.LogInfo("[REL] ======= 本地化引擎已全部就绪！ =======");
         }
@@ -55,7 +64,14 @@ namespace ReaperEmporiumLocalization
                     TranslationManager.LoadTranslations(dllPath, true); 
 
                     // 重新全量加载 Database 翻译 (追加模式)
-                    LoadAllDatabaseTranslations(); 
+                    LoadAllDatabaseTranslations();
+
+                    if (LocalizationConfig.EnableFontReplacement.Value)
+                    {
+                        FontManager.Reload();
+                        int patchedTexts = Patchers.FontHook.RefreshAllTexts();
+                        Logger.LogInfo($"[REL] 字体规则热重载完成：{FontManager.ReplacementRules.Count} 条规则，刷新 {patchedTexts} 个文本组件。");
+                    }
 
                     Logger.LogInfo("[REL] 热重载完成！");
                 }

@@ -96,6 +96,22 @@ class ParatranzTerm(ApiModel):
     variants: list[str] = Field(default_factory=list)
     case_sensitive: bool | None = Field(default=None, alias="caseSensitive")
 
+    @field_validator("updated_by", mode="before")
+    @classmethod
+    def normalize_updated_by(cls, value: Any) -> Any:
+        """兼容旧项目接口把 updatedBy 展开成用户对象的情况。"""
+        if isinstance(value, dict):
+            return value.get("id")
+        return value
+
+    @field_validator("variants", mode="before")
+    @classmethod
+    def normalize_variants(cls, value: Any) -> Any:
+        """兼容旧项目术语把 variants 返回成 null 的情况。"""
+        if value is None:
+            return []
+        return value
+
 
 class ParatranzTermHistory(ApiModel):
     """ParaTranz 术语修改历史。"""

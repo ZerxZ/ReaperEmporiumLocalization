@@ -139,6 +139,32 @@ def cmd_migrate_translations(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_migrate_terms(args: argparse.Namespace) -> int:
+    """把旧 ParaTranz 项目的术语迁移到新项目。"""
+    api = Paratranz()
+    result = api.migrate_terms_to_project(
+        source_project_id=args.source_project_id,
+        target_project_id=args.target_project_id,
+        dry_run=not args.execute,
+        show_progress=args.progress,
+    )
+    target_project_id = args.target_project_id or api.project_id
+    logger.success(
+        "{}项目术语迁移：源项目 {} -> 目标项目 {}，共 {} 页，{} 条术语{}",
+        "[dry-run] " if not args.execute else "",
+        args.source_project_id,
+        target_project_id,
+        result.planned,
+        sum(len(action.metadata.get("terms", [])) for action in result.actions),
+        f"，成功迁移 {result.migrated_entries} 条" if args.execute else "",
+    )
+    if result.errors:
+        logger.warning("术语迁移过程中有 {} 个失败页：{}", len(result.errors), " | ".join(result.errors))
+    if not args.execute:
+        logger.info("默认只预览计划；确认无误后加 --execute 才会写入目标 ParaTranz 项目。")
+    return 0
+
+
 def cmd_package_final(args: argparse.Namespace) -> int:
     """把 MainGame/DLCGame 合并为游戏运行时 localization 包。"""
     stats = package_final_localization(
@@ -226,6 +252,20 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--dry-run", action="store_true", help="只生成迁移统计，不写入 build/migrated。")
     migrate.add_argument("--progress", action="store_true", help="显示迁移进度条。")
     migrate.set_defaults(func=cmd_migrate_translations)
+
+    migrate_terms = _with_chinese_help(
+        subparsers.add_parser(
+            "迁移术语",
+            aliases=["migrate-terms"],
+            help="把旧 ParaTranz 项目的术语迁移到新 ParaTranz 项目；默认只预览，不直接写入。",
+            add_help=False,
+        )
+    )
+    migrate_terms.add_argument("--source-project-id", type=int, required=True, help="旧 ParaTranz 项目 ID。")
+    migrate_terms.add_argument("--target-project-id", type=int, help="新 ParaTranz 项目 ID；未传时默认使用 .env 里的 PARATRANZ_PROJECT_ID。")
+    migrate_terms.add_argument("--execute", action="store_true", help="真正执行术语导入；未传时仅预览迁移计划。")
+    migrate_terms.add_argument("--progress", action="store_true", help="显示术语读取和导入进度。")
+    migrate_terms.set_defaults(func=cmd_migrate_terms)
 
     package_final = _with_chinese_help(
         subparsers.add_parser(

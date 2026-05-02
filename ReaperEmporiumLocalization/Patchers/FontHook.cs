@@ -1,33 +1,37 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using ReaperEmporiumLocalization.Core;
 using UnityEngine;
 using UnityEngine.UI;
-using Utage;
 
 namespace ReaperEmporiumLocalization.Patchers
 {
-    [HarmonyPatch(typeof(UguiNovelText), "Awake")]
-    public class FontHook
+    [HarmonyPatch(typeof(Text), "OnEnable")]
+    public static class FontHook
     {
+        [HarmonyPostfix]
         public static void Postfix(Text __instance)
         {
-            if (__instance == null || __instance.font == null) return;
+            Apply(__instance);
+        }
 
-            FontManager.InitFont();
+        public static bool Apply(Text target)
+        {
+            return FontManager.TryApply(target);
+        }
 
-            string fontName = __instance.font.name;
-
-            if (FontManager.ReplacementRules.TryGetValue(fontName, out FontReplacementRule rule))
+        public static int RefreshAllTexts()
+        {
+            int changedCount = 0;
+            Text[] texts = Resources.FindObjectsOfTypeAll<Text>();
+            foreach (Text text in texts)
             {
-                if (rule.CustomFont != null)
+                if (Apply(text))
                 {
-                    // 1. 替换自定义字体
-                    __instance.font = rule.CustomFont;
-                    
-                    // 2. 🎯 直接应用我们在 JSON 中配置好的字体样式
-                    __instance.fontStyle = rule.Style;
+                    changedCount++;
                 }
             }
+
+            return changedCount;
         }
     }
 }

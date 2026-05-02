@@ -740,7 +740,7 @@ class Paratranz:
                             action="migrate_import_terms",
                             project_id=source_project_id,
                             target_project_id=target_project_id,
-                            metadata={"terms": [term.to_api_payload() for term in term_page.results]},
+                            metadata={"terms": [self._term_import_payload(term) for term in term_page.results]},
                         )
                     )
 
@@ -778,6 +778,71 @@ class Paratranz:
             except Exception as exc:  # noqa: BLE001 - 迁移流程需要报告所有失败项。
                 result.failed += 1
                 result.errors.append(f"{action.remote_name or action.action}: {exc}")
+        return result
+
+    def migrate_terms_to_project(
+        self,
+        source_project_id: int,
+        target_project_id: int | None = None,
+        *,
+        dry_run: bool = True,
+        show_progress: bool = False,
+    ) -> MigrationResult:
+        """把旧 ParaTranz 项目的术语迁移到目标项目。
+        这个流程只处理术语，不碰文件和译文。默认 dry-run，只生成迁移计划；真正执行时会
+        按页读取旧项目术语，再调用目标项目的术语导入接口。
+        """
+
+        resolved_target_project_id = self._resolve_project_id(target_project_id)
+        if source_project_id == resolved_target_project_id:
+            raise ValueError("源项目和目标项目不能相同。")
+
+        actions: list[SyncAction] = []
+        page_number = 1
+
+        with ProgressBar(total=None, enabled=show_progress, desc="读取旧项目术语", unit="页") as progress:
+            while True:
+                page = self.get_terms(page=page_number, page_size=100, project_id=source_project_id)
+                if page.results:
+                    actions.append(
+                        SyncAction(
+                            action="migrate_terms",
+                            project_id=source_project_id,
+                            target_project_id=resolved_target_project_id,
+                            will_write=True,
+                            metadata={
+                                "page": page_number,
+                                "terms": [self._term_import_payload(term) for term in page.results],
+                            },
+                        )
+                    )
+                progress.set_postfix_str(f"第 {page_number} 页")
+                progress.update()
+                if not page.results or (page.page_count is not None and page_number >= page.page_count):
+                    break
+                page_number += 1
+
+        result = MigrationResult(
+            planned=len(actions),
+            dry_run=dry_run,
+            actions=actions,
+        )
+        if dry_run:
+            return result
+
+        with ProgressBar(total=len(actions), enabled=show_progress, desc="迁移项目术语", unit="页") as progress:
+            for action in actions:
+                try:
+                    with self._temporary_json_file(action.metadata["terms"], filename=f"terms-page-{action.metadata['page']}.json") as temp_file:
+                        self.import_terms(temp_file, project_id=resolved_target_project_id)
+                    result.succeeded += 1
+                    result.migrated_entries += len(action.metadata["terms"])
+                except Exception as exc:  # noqa: BLE001 - 术语迁移需要继续处理后续页并报告失败
+                    result.failed += 1
+                    result.errors.append(f"第 {action.metadata['page']} 页术语: {exc}")
+                progress.set_postfix_str(f"第 {action.metadata['page']} 页")
+                progress.update()
+
         return result
 
     def migrate_local_translations(
@@ -1384,6 +1449,17 @@ class Paratranz:
             except (OSError, ValueError):
                 continue
         return path.as_posix()
+
+    def _term_import_payload(self, term: ParatranzTerm) -> dict[str, Any]:
+        """把术语响应模型收敛成导入接口真正需要的字段。"""
+        return TermWriteRequest(
+            pos=term.pos,
+            term=term.term,
+            translation=term.translation,
+            note=term.note,
+            variants=term.variants,
+            case_sensitive=term.case_sensitive,
+        ).to_api_payload()
 
     def _iter_term_pages(self, *, project_id: int) -> Iterable[Page[ParatranzTerm]]:
         """按页迭代项目术语，供项目间迁移使用。"""

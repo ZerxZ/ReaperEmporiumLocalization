@@ -13,6 +13,7 @@ python main.py 下载包 --progress
 python main.py 拉取安装 --progress
 python main.py 构建差异
 python main.py 迁移翻译 --progress
+python main.py 迁移术语 --source-project-id 旧项目ID --progress
 python main.py 最终打包 --progress
 ```
 
@@ -24,6 +25,7 @@ python main.py 最终打包 --progress
 | `查看统计` | `stats` | 统计本地翻译包中的数据库和 DLL 词条数量。 |
 | `构建差异` | `build-dump` | 根据 MainGame/DLCGame 转储数据构建差异输出。 |
 | `迁移翻译` | `migrate-translations` | 把旧 ParaTranz 译文迁移到新 `build/dump` 结构。 |
+| `迁移术语` | `migrate-terms` | 把旧 ParaTranz 项目的术语迁移到新 ParaTranz 项目。 |
 | `最终打包` | `package-final` | 合并 `MainGame`/`DLCGame`，生成游戏运行时 `localization` 目录和发布 zip。 |
 
 常用参数仍保留英文名称：
@@ -33,6 +35,7 @@ python main.py 最终打包 --progress
 - `--game-root`：指定游戏根目录。
 - `--no-clear`：安装前不清理已有汉化 JSON。
 - `--dry-run`：只预览迁移统计，不写入迁移结果。
+- `--execute`：对远端 ParaTranz 命令真正执行写入；未传时只预览计划。
 
 ## 配置
 
@@ -139,6 +142,22 @@ python main.py 迁移翻译 --progress
 ```
 
 这个命令只生成本地文件，不会自动上传、创建、更新或删除 ParaTranz 远端文件。旧 `asset_XX_text_DLC` 目录会按当前新 dump 的 DLC 目录映射到 `DLCGame/database/asset_XX_text`；旧 `DLL/` 文件夹会对应当前的 `dll_strings.json`，其中纯数字旧 key 会按 `original` 精确迁移。重复旧文件会按词条合并择优，质量相同但译文不同的候选会写入 `migration_report.json` 的 `conflicts`。
+
+## 迁移旧项目术语
+
+`迁移术语` 用于把旧 ParaTranz 项目的术语迁移到新项目。这个命令只处理术语，不会同步文件、译文或删除目标项目内容。为了安全，默认只预览迁移计划，不直接写入远端：
+
+```powershell
+python main.py 迁移术语 --source-project-id 旧项目ID
+```
+
+确认页数和术语数量无误后，再显式执行：
+
+```powershell
+python main.py 迁移术语 --source-project-id 旧项目ID --target-project-id 新项目ID --execute --progress
+```
+
+如果不传 `--target-project-id`，默认使用 `.env` 里的 `PARATRANZ_PROJECT_ID` 作为新项目 ID。迁移时会按页读取旧项目术语，并调用 ParaTranz 的术语导入接口写入目标项目。
 
 ## 最终打包
 
