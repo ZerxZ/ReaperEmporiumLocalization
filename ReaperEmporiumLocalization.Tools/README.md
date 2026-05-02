@@ -2,19 +2,22 @@
 
 这是 `ReaperEmporiumLocalization` 项目里的 Python 辅助工具，用于处理 ParaTranz 翻译包下载、本地翻译安装、翻译包统计，以及从游戏转储数据构建可上传到 ParaTranz 的差异包。
 
+现在推荐直接使用 `reaper-tools ...`。根目录的 `python main.py ...` 仍然可用，但它已经只是转发到新的 Click CLI 入口。
+
 ## 命令速查
 
 中文命令是主入口；旧的英文命令仍作为别名保留，方便已有脚本继续使用。
 
 ```powershell
-python main.py 查看统计 data
-python main.py 安装包 data
-python main.py 下载包 --progress
-python main.py 拉取安装 --progress
-python main.py 构建差异
-python main.py 迁移翻译 --progress
-python main.py 迁移术语 --source-project-id 旧项目ID --progress
-python main.py 最终打包 --progress
+reaper-tools 查看统计 data
+reaper-tools 安装包 data
+reaper-tools 下载包 --progress
+reaper-tools 拉取安装 --progress
+reaper-tools 构建差异
+reaper-tools 迁移翻译 --progress
+reaper-tools 迁移术语 --source-project-id 旧项目ID --progress
+reaper-tools 上传翻译 --project-id 新项目ID --progress
+reaper-tools 最终打包 --progress
 ```
 
 | 中文命令 | 英文别名 | 用途 |
@@ -26,6 +29,7 @@ python main.py 最终打包 --progress
 | `构建差异` | `build-dump` | 根据 MainGame/DLCGame 转储数据构建差异输出。 |
 | `迁移翻译` | `migrate-translations` | 把旧 ParaTranz 译文迁移到新 `build/dump` 结构。 |
 | `迁移术语` | `migrate-terms` | 把旧 ParaTranz 项目的术语迁移到新 ParaTranz 项目。 |
+| `上传翻译` | `upload-translations` | 把人工检查后的 `build/migrated` 上传到目标 ParaTranz 项目，并把冲突候选逐次写入文件修订历史后再恢复最终译文。 |
 | `最终打包` | `package-final` | 合并 `MainGame`/`DLCGame`，生成游戏运行时 `localization` 目录和发布 zip。 |
 
 常用参数仍保留英文名称：
@@ -66,7 +70,7 @@ PARATRANZ_TOKEN=
 - 写入游戏运行时需要的 `localization/database` 和 `localization/dll_strings`。
 
 ```powershell
-python main.py 安装包 data --progress
+reaper-tools 安装包 data --progress
 ```
 
 ## 拉取 ParaTranz 并安装
@@ -74,7 +78,7 @@ python main.py 安装包 data --progress
 `拉取安装` 会先下载 ParaTranz 的最新导出包，解压后直接安装到游戏目录：
 
 ```powershell
-python main.py 拉取安装 --force --progress
+reaper-tools 拉取安装 --force --progress
 ```
 
 如果本地已有缓存，默认会复用 `data/cache/paratranz_export.zip`；加上 `--force` 可强制重新下载。
@@ -121,7 +125,7 @@ build/dump/
 - 空的 DLC 差异文件会跳过。
 
 ```powershell
-python main.py 构建差异 --progress
+reaper-tools 构建差异 --progress
 ```
 
 ## 迁移旧 ParaTranz 译文
@@ -138,7 +142,7 @@ build/migrated/
 默认读取 `data/paratranz` 和 `build/dump`：
 
 ```powershell
-python main.py 迁移翻译 --progress
+reaper-tools 迁移翻译 --progress
 ```
 
 这个命令只生成本地文件，不会自动上传、创建、更新或删除 ParaTranz 远端文件。旧 `asset_XX_text_DLC` 目录会按当前新 dump 的 DLC 目录映射到 `DLCGame/database/asset_XX_text`；旧 `DLL/` 文件夹会对应当前的 `dll_strings.json`，其中纯数字旧 key 会按 `original` 精确迁移。重复旧文件会按词条合并择优，质量相同但译文不同的候选会写入 `migration_report.json` 的 `conflicts`。
@@ -148,16 +152,38 @@ python main.py 迁移翻译 --progress
 `迁移术语` 用于把旧 ParaTranz 项目的术语迁移到新项目。这个命令只处理术语，不会同步文件、译文或删除目标项目内容。为了安全，默认只预览迁移计划，不直接写入远端：
 
 ```powershell
-python main.py 迁移术语 --source-project-id 旧项目ID
+reaper-tools 迁移术语 --source-project-id 旧项目ID
 ```
 
 确认页数和术语数量无误后，再显式执行：
 
 ```powershell
-python main.py 迁移术语 --source-project-id 旧项目ID --target-project-id 新项目ID --execute --progress
+reaper-tools 迁移术语 --source-project-id 旧项目ID --target-project-id 新项目ID --execute --progress
 ```
 
 如果不传 `--target-project-id`，默认使用 `.env` 里的 `PARATRANZ_PROJECT_ID` 作为新项目 ID。迁移时会按页读取旧项目术语，并调用 ParaTranz 的术语导入接口写入目标项目。
+
+## 上传迁移结果
+
+`上传翻译` 用于把已经人工检查过的 `build/migrated` 上传到新 ParaTranz 项目。这个命令不会去读取词条列表，也不会给冲突发评论；它会：
+
+1. 先把 `build/migrated` 整体同步到目标项目。
+2. 读取 `migration_report.json` 里的 `conflicts`，对每条冲突候选逐次生成临时文件并上传，让 ParaTranz 文件修订历史里留下记录。
+3. 最后再把 `build/migrated` 的最终译文整包上传一次，以当前迁移结果为准。
+
+默认只预览计划，不直接写入远端：
+
+```powershell
+reaper-tools 上传翻译 --project-id 新项目ID
+```
+
+确认计划无误后，再显式执行：
+
+```powershell
+reaper-tools 上传翻译 --project-id 新项目ID --execute --progress
+```
+
+如果不传 `--project-id`，默认使用 `.env` 里的 `PARATRANZ_PROJECT_ID`。如果不传 `--report-path`，默认读取 `build/migrated/migration_report.json`。冲突记录阶段会串行执行，继续沿用工具内保守的限速策略，避免对 ParaTranz 发送过于密集的写请求。
 
 ## 最终打包
 
@@ -174,7 +200,7 @@ build/package/
 推荐流程是先执行 `构建差异`，需要套用旧 ParaTranz 译文时再执行 `迁移翻译`，最后执行：
 
 ```powershell
-python main.py 最终打包 --progress
+reaper-tools 最终打包 --progress
 ```
 
 合并时，同一路径数据库 JSON 会按 `original` 去重：先放入 `MainGame` 词条，`DLCGame` 同原文词条覆盖本体译文，DLC 新原文追加。DLL 会合并成单个 `localization/dll_strings/dll_strings.json`，同原文优先使用 DLC，再按 `stage/translation` 质量择优。zip 内只包含 `localization/` 目录，可直接解压到游戏根目录。
@@ -182,5 +208,5 @@ python main.py 最终打包 --progress
 如果想跳过迁移，直接使用当前差异构建产物，也可以指定：
 
 ```powershell
-python main.py 最终打包 --source-root build/dump --progress
+reaper-tools 最终打包 --source-root build/dump --progress
 ```

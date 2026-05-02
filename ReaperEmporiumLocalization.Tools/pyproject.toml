@@ -1,13 +1,26 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "reaperemporiumlocalization-tools"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "click>=8.1.8",
     "diff-match-patch>=20241021",
     "httpx==0.28.1",
     "loguru==0.7.3",
     "pydantic==2.13.3",
     "pydantic-settings==2.14.0",
+    "python-inquirer>=1.0.3",
     "thefuzz>=0.22.1",
     "tqdm>=4.67.3",
 ]
+
+[project.scripts]
+reaper-tools = "src.apps.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

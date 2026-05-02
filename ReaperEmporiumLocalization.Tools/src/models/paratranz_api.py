@@ -317,6 +317,25 @@ class MigrationResult(ApiModel):
     actions: list[SyncAction] = Field(default_factory=list)
 
 
+class UploadResult(ApiModel):
+    """上传人工检查后的迁移结果，并记录冲突历史后的汇总结果。"""
+
+    dry_run: bool = True
+    file_planned: int = 0
+    file_succeeded: int = 0
+    file_failed: int = 0
+    file_skipped: int = 0
+    conflict_planned: int = 0
+    conflict_recorded: int = 0
+    conflict_skipped: int = 0
+    conflict_failed: int = 0
+    finalize_planned: int = 0
+    finalize_succeeded: int = 0
+    finalize_failed: int = 0
+    errors: list[str] = Field(default_factory=list)
+    actions: list[SyncAction] = Field(default_factory=list)
+
+
 __all__ = [
     "ApiModel",
     "BatchOperationResponse",
@@ -340,4 +359,5 @@ __all__ = [
     "SyncPlan",
     "TermImportResult",
     "TermWriteRequest",
+    "UploadResult",
 ]

@@ -24,6 +24,7 @@ from src.models.paratranz_api import (
     SyncPlan,
     TermImportResult,
     TermWriteRequest,
+    UploadResult,
 )
 
 __all__ = [
@@ -51,5 +52,6 @@ __all__ = [
     "SyncPlan",
     "TermImportResult",
     "TermWriteRequest",
+    "UploadResult",
     "paratranz_data_list_adapter",
 ]

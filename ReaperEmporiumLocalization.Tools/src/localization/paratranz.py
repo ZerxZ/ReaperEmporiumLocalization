@@ -43,6 +43,7 @@ from src.models import (
     SyncPlan,
     TermImportResult,
     TermWriteRequest,
+    UploadResult,
     paratranz_data_list_adapter,
 )
 
@@ -581,6 +582,8 @@ class Paratranz:
         update_existing: bool = True,
         force_translation: bool = False,
         dry_run: bool = True,
+        show_progress: bool = False,
+        progress_desc: str = "同步 ParaTranz 文件",
     ) -> BatchResult:
         """把本地 JSON 批量同步到 ParaTranz。
 
@@ -606,26 +609,30 @@ class Paratranz:
             return result
 
         before_retries = self.retry_count
-        for action in plan.actions:
-            if not action.will_write:
-                continue
-            try:
-                if action.action == "create_file":
-                    path = self._remote_parent(action.remote_name or "")
-                    self.create_file(action.local_path or "", path=path, project_id=project_id)
-                elif action.action == "update_file_translation":
-                    self.update_file_translation(
-                        action.file_id or 0,
-                        action.local_path or "",
-                        force=force_translation,
-                        project_id=project_id,
-                    )
-                elif action.action == "update_file":
-                    self.update_file(action.file_id or 0, action.local_path or "", project_id=project_id)
-                result.succeeded += 1
-            except Exception as exc:  # noqa: BLE001 - 批量结果需要收集失败并继续处理后续动作。
-                result.failed += 1
-                result.errors.append(f"{action.remote_name}: {exc}")
+        with ProgressBar(total=plan.write_count, enabled=show_progress, desc=progress_desc, unit="文件") as progress:
+            for action in plan.actions:
+                if not action.will_write:
+                    continue
+                remote_name = action.remote_name or (action.local_path.as_posix() if action.local_path else action.action)
+                try:
+                    if action.action == "create_file":
+                        path = self._remote_parent(action.remote_name or "")
+                        self.create_file(action.local_path or "", path=path, project_id=project_id)
+                    elif action.action == "update_file_translation":
+                        self.update_file_translation(
+                            action.file_id or 0,
+                            action.local_path or "",
+                            force=force_translation,
+                            project_id=project_id,
+                        )
+                    elif action.action == "update_file":
+                        self.update_file(action.file_id or 0, action.local_path or "", project_id=project_id)
+                    result.succeeded += 1
+                except Exception as exc:  # noqa: BLE001 - 批量结果需要收集失败并继续处理后续动作。
+                    result.failed += 1
+                    result.errors.append(f"{action.remote_name}: {exc}")
+                progress.set_postfix_str(self._normalize_remote_name(str(remote_name)))
+                progress.update()
         result.retried = self.retry_count - before_retries
         return result
 
@@ -845,6 +852,127 @@ class Paratranz:
 
         return result
 
+    def upload_migrated_translations(
+        self,
+        source_root: str | Path | None = None,
+        *,
+        report_path: str | Path | None = None,
+        project_id: int | None = None,
+        dry_run: bool = True,
+        show_progress: bool = False,
+    ) -> UploadResult:
+        """上传人工检查后的迁移结果，并把冲突候选逐次写入文件历史后再恢复最终译文。
+
+        这个流程不再依赖词条列表接口，也不再给冲突发评论。它会先把 `build/migrated`
+        里的译文同步到目标项目，随后针对 `migration_report.json` 里的冲突，逐条生成只改动
+        单个冲突译文的临时文件并上传，让 ParaTranz 文件修订历史里留下记录；最后再把
+        `build/migrated` 的最终结果整包上传一次，以本地人工确认后的译文为准。
+        """
+
+        source_root_path = Path(source_root) if source_root is not None else paths.root / "build" / "migrated"
+        report_file_path = Path(report_path) if report_path is not None else source_root_path / MIGRATION_REPORT_FILE
+        resolved_project_id = self._resolve_project_id(project_id)
+
+        if not source_root_path.is_dir():
+            raise FileNotFoundError(f"未找到可上传的迁移目录：{source_root_path}")
+        if not self._json_files(source_root_path):
+            raise FileNotFoundError(f"迁移结果目录中没有可上传的 JSON 文件：{source_root_path}")
+
+        initial_result = self.sync_files_from_local(
+            source_root_path,
+            project_id=resolved_project_id,
+            update_mode="translation",
+            create_missing=True,
+            update_existing=True,
+            force_translation=True,
+            dry_run=dry_run,
+            show_progress=show_progress,
+            progress_desc="上传迁移译文",
+        )
+        result = UploadResult(
+            dry_run=dry_run,
+            file_planned=initial_result.planned,
+            file_succeeded=initial_result.succeeded,
+            file_failed=initial_result.failed,
+            file_skipped=initial_result.skipped,
+            actions=list(initial_result.actions),
+            errors=list(initial_result.errors),
+        )
+
+        conflicts = self._load_migration_conflicts(report_file_path)
+        conflict_actions = self._build_conflict_record_actions(
+            source_root_path,
+            conflicts,
+            project_id=resolved_project_id,
+        )
+        result.conflict_planned = sum(1 for action in conflict_actions if action.will_write)
+        result.conflict_skipped = sum(1 for action in conflict_actions if not action.will_write)
+        result.actions.extend(conflict_actions)
+
+        finalize_actions = self._build_finalize_actions(source_root_path, resolved_project_id) if result.conflict_planned else []
+        result.finalize_planned = len(finalize_actions)
+        result.actions.extend(finalize_actions)
+
+        if dry_run:
+            return result
+
+        remote_files = {
+            self._normalize_remote_name(item.name): item
+            for item in self.get_files(project_id=resolved_project_id)
+            if item.name
+        }
+
+        with ProgressBar(total=result.conflict_planned, enabled=show_progress, desc="记录冲突译文", unit="次") as progress:
+            for action in conflict_actions:
+                if not action.will_write:
+                    continue
+                remote_name = self._normalize_remote_name(action.remote_name or "")
+                try:
+                    remote_file = remote_files.get(remote_name)
+                    if remote_file is None or remote_file.id is None:
+                        result.conflict_skipped += 1
+                        result.errors.append(f"{remote_name}: 远端文件不存在，无法记录冲突译文")
+                        progress.set_postfix_str(remote_name)
+                        progress.update()
+                        continue
+                    entries = self._build_conflict_record_entries(
+                        source_root_path / remote_name,
+                        action.metadata.get("identity"),
+                        str(action.metadata.get("translation", "")),
+                    )
+                    if entries is None:
+                        result.conflict_skipped += 1
+                        result.errors.append(f"{remote_name}: 未找到对应的冲突词条，已跳过")
+                        progress.set_postfix_str(remote_name)
+                        progress.update()
+                        continue
+                    with self._temporary_paratranz_file(entries, filename=Path(remote_name).name) as temp_file:
+                        self.update_file_translation(remote_file.id, temp_file, force=True, project_id=resolved_project_id)
+                    result.conflict_recorded += 1
+                except Exception as exc:  # noqa: BLE001 - 冲突记录需要收集失败后继续执行
+                    result.conflict_failed += 1
+                    result.errors.append(f"{remote_name}: {exc}")
+                progress.set_postfix_str(remote_name)
+                progress.update()
+
+        if finalize_actions:
+            finalize_result = self.sync_files_from_local(
+                source_root_path,
+                project_id=resolved_project_id,
+                update_mode="translation",
+                create_missing=True,
+                update_existing=True,
+                force_translation=True,
+                dry_run=False,
+                show_progress=show_progress,
+                progress_desc="回写最终译文",
+            )
+            result.finalize_succeeded = finalize_result.succeeded
+            result.finalize_failed = finalize_result.failed
+            result.errors.extend(finalize_result.errors)
+
+        return result
+
     def migrate_local_translations(
         self,
         old_root: str | Path,
@@ -994,6 +1122,193 @@ class Paratranz:
             actions=actions,
             report=report,
         )
+
+    def _load_migration_conflicts(self, report_path: Path) -> list[dict[str, Any]]:
+        """读取迁移报告中的冲突列表；报告缺失或损坏时返回空列表。"""
+        if not report_path.is_file():
+            logger.warning("未找到迁移报告：{}，本次只上传迁移后的最终译文。", report_path)
+            return []
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("读取迁移报告失败：{}，本次跳过冲突历史记录。", exc)
+            return []
+        conflicts = payload.get("conflicts", [])
+        if not isinstance(conflicts, list):
+            logger.warning("迁移报告中的 conflicts 字段不是数组，本次跳过冲突历史记录。")
+            return []
+        return [item for item in conflicts if isinstance(item, dict)]
+
+    def _build_conflict_record_actions(
+        self,
+        source_root: Path,
+        conflicts: list[dict[str, Any]],
+        *,
+        project_id: int,
+    ) -> list[SyncAction]:
+        """把冲突报告转换成“逐条写入修订历史”的动作列表。"""
+        actions: list[SyncAction] = []
+        entries_cache: dict[str, list[ParatranzData]] = {}
+
+        for conflict_index, conflict in enumerate(conflicts, start=1):
+            target_file = self._normalize_remote_name(str(conflict.get("target_file") or ""))
+            if not target_file:
+                actions.append(
+                    SyncAction(
+                        action="skip_conflict_record",
+                        project_id=project_id,
+                        will_write=False,
+                        reason="冲突记录缺少 target_file。",
+                        metadata={"conflict_index": conflict_index},
+                    )
+                )
+                continue
+
+            local_file = source_root / target_file
+            if not local_file.is_file():
+                actions.append(
+                    SyncAction(
+                        action="skip_conflict_record",
+                        local_path=local_file,
+                        remote_name=target_file,
+                        project_id=project_id,
+                        will_write=False,
+                        reason="迁移结果中不存在对应文件。",
+                        metadata={"conflict_index": conflict_index},
+                    )
+                )
+                continue
+
+            entries = entries_cache.setdefault(target_file, self._read_paratranz_file(local_file))
+            local_entry = self._find_conflict_local_entry(Path(target_file), entries, conflict.get("identity"))
+            if local_entry is None:
+                actions.append(
+                    SyncAction(
+                        action="skip_conflict_record",
+                        local_path=local_file,
+                        remote_name=target_file,
+                        project_id=project_id,
+                        will_write=False,
+                        reason="迁移结果中未找到对应冲突词条。",
+                        metadata={"conflict_index": conflict_index, "identity": conflict.get("identity")},
+                    )
+                )
+                continue
+
+            translations = self._conflict_record_translations(
+                conflict.get("translations"),
+                local_entry.translation,
+            )
+            if not translations:
+                actions.append(
+                    SyncAction(
+                        action="skip_conflict_record",
+                        local_path=local_file,
+                        remote_name=target_file,
+                        project_id=project_id,
+                        will_write=False,
+                        reason="冲突候选与最终迁移译文相同，无需额外记录。",
+                        metadata={"conflict_index": conflict_index, "identity": conflict.get("identity")},
+                    )
+                )
+                continue
+
+            for translation in translations:
+                actions.append(
+                    SyncAction(
+                        action="record_conflict_translation",
+                        local_path=local_file,
+                        remote_name=target_file,
+                        project_id=project_id,
+                        method="POST",
+                        endpoint=f"/projects/{project_id}/files/{{fileId}}/translation",
+                        metadata={
+                            "conflict_index": conflict_index,
+                            "identity": conflict.get("identity"),
+                            "translation": translation,
+                            "final_translation": local_entry.translation,
+                            "phase": "conflict_record",
+                        },
+                    )
+                )
+        return actions
+
+    def _build_finalize_actions(self, source_root: Path, project_id: int) -> list[SyncAction]:
+        """构建“以迁移结果为准再覆盖一次”的收尾动作列表。"""
+        return [
+            SyncAction(
+                action="finalize_file_translation",
+                local_path=file_path,
+                remote_name=self._remote_name(source_root, file_path, ""),
+                project_id=project_id,
+                method="POST",
+                endpoint=f"/projects/{project_id}/files/{{fileId}}/translation",
+                metadata={"phase": "finalize"},
+            )
+            for file_path in self._json_files(source_root)
+        ]
+
+    def _conflict_record_translations(self, value: Any, final_translation: str) -> list[str]:
+        """整理冲突候选译文，去重并排除当前最终译文。"""
+        if not isinstance(value, list):
+            return []
+        seen: set[str] = set()
+        translations: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                continue
+            if not item.strip() or item == final_translation or item in seen:
+                continue
+            seen.add(item)
+            translations.append(item)
+        return translations
+
+    def _build_conflict_record_entries(
+        self,
+        local_file: Path,
+        identity: Any,
+        translation: str,
+    ) -> list[ParatranzData] | None:
+        """基于最终迁移文件生成一个只改动单条冲突译文的临时文件内容。"""
+        relative = Path(local_file.name)
+        entries = self._read_paratranz_file(local_file)
+        updated = False
+        cloned = [entry.model_copy(deep=True) for entry in entries]
+        for entry in cloned:
+            if not self._entry_matches_conflict_identity(relative, entry, identity):
+                continue
+            entry.translation = translation
+            updated = True
+            break
+        if not updated:
+            return None
+        return cloned
+
+    def _find_conflict_local_entry(
+        self,
+        relative: Path,
+        entries: list[ParatranzData],
+        identity: Any,
+    ) -> ParatranzData | None:
+        """在本地迁移后的文件里定位冲突报告所指向的最终词条。"""
+        for entry in entries:
+            if self._entry_matches_conflict_identity(relative, entry, identity):
+                return entry
+        return None
+
+    def _entry_matches_conflict_identity(self, relative: Path, entry: ParatranzData, identity: Any) -> bool:
+        """判断词条是否匹配冲突报告里的 identity。"""
+        if relative.name == DLL_STRINGS_FILE:
+            if isinstance(identity, (list, tuple)) and len(identity) >= 3:
+                return (
+                    entry.key == str(identity[0])
+                    and entry.original == str(identity[1])
+                    and entry.context == str(identity[2])
+                )
+            if isinstance(identity, str):
+                return entry.runtime_original == identity
+            return False
+        return isinstance(identity, str) and entry.runtime_original == identity
 
     def _execute_string_batches(
         self,
@@ -1475,7 +1790,10 @@ class Paratranz:
         """稳定列出目录内所有 JSON 文件。"""
         if not root.exists():
             return []
-        return sorted(root.rglob("*.json"), key=lambda item: item.relative_to(root).as_posix().casefold())
+        return sorted(
+            (item for item in root.rglob("*.json") if item.name != MIGRATION_REPORT_FILE),
+            key=lambda item: item.relative_to(root).as_posix().casefold(),
+        )
 
     def _remote_name(self, source_root: Path, file_path: Path, remote_prefix: str) -> str:
         """根据本地相对路径生成 ParaTranz 远端文件名。"""
