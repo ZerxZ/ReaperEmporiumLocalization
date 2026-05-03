@@ -9,6 +9,7 @@ namespace ReaperEmporiumLocalization.Shared
         public static ConfigEntry<bool> EnableDllDump      { get; private set; } = null!;
         public static ConfigEntry<bool> EnableDatabaseDump { get; private set; } = null!;
         public static ConfigEntry<bool> EnableFontReplacement { get; private set; } = null!;
+        public static ConfigEntry<bool> EnableAutoGenerateFontJson { get; private set; } = null!;
         
         // 【关键修改】使用普通 string 替代 UnityEngine.KeyCode
         public static ConfigEntry<string> HotReloadKey { get; private set; } = null!;
@@ -25,6 +26,7 @@ namespace ReaperEmporiumLocalization.Shared
             EnableDllDump = config.Bind("Developer",      "EnableDllDump",      false, "【开发者】是否开启 DLL 硬编码日文文本提取？");
             EnableDatabaseDump = config.Bind("Developer", "EnableDatabaseDump", false, "【开发者】是否开启 AssetBundle 原版数据库文本提取？");
             EnableFontReplacement = config.Bind("Feature", "EnableFontReplacement", true, "是否启用 localization/fonts 下的字体替换规则？");
+            EnableAutoGenerateFontJson = config.Bind("Feature", "EnableAutoGenerateFontJson", false, "是否允许在扫描 localization/fonts 时为缺失规则的字体源自动生成同名 json 模板？");
             
             // 默认值改为字符串 "F5"
             HotReloadKey = config.Bind("Developer", "HotReloadKey", "F5", "【开发者】热重载快捷键名称 (如 F5, F6, F12)");

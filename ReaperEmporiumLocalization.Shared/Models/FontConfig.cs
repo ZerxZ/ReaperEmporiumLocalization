@@ -11,6 +11,9 @@ namespace ReaperEmporiumLocalization.Shared.Models
         [JsonProperty("target_fonts")]
         public List<string> TargetFonts { get; set; } = new List<string>();
 
+        [JsonProperty("custom_font")]
+        public string CustomFont { get; set; } = "";
+
         // 接收 JSON 里的字符串配置，默认给 "Normal"
         [JsonProperty("font_style")]
         public string FontStyleStr { get; set; } = "Normal";
