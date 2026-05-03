@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using BepInEx;
 using BepInEx.Logging;
@@ -29,6 +30,16 @@ namespace ReaperEmporiumLocalization.Core
         public bool IsLocalFile => !string.IsNullOrWhiteSpace(FullPath);
     }
 
+    internal sealed class FontNameRecord
+    {
+        public ushort PlatformId { get; set; }
+        public ushort EncodingId { get; set; }
+        public ushort LanguageId { get; set; }
+        public ushort NameId { get; set; }
+        public ushort Length { get; set; }
+        public ushort Offset { get; set; }
+    }
+
     public static class FontManager
     {
         public static readonly Dictionary<string, FontReplacementRule> ReplacementRules =
@@ -42,9 +53,12 @@ namespace ReaperEmporiumLocalization.Core
             new HashSet<string>(new[] { "", ".ab", ".bundle" }, StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> DynamicFontExtensions =
             new HashSet<string>(new[] { ".ttf", ".otf" }, StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> RegisteredPrivateFontFiles =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private const string DefaultTargetFontPlaceholder = "请改成需要替换的原字体名";
         private const int DynamicFontSize = 16;
+        private const uint FrPrivate = 0x10;
 
         private static bool _isInitialized;
 
@@ -52,9 +66,16 @@ namespace ReaperEmporiumLocalization.Core
         public static int LastGeneratedJsonCount { get; private set; }
         public static int LastLoadedJsonCount { get; private set; }
 
+        [DllImport("gdi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern int AddFontResourceEx(string lpszFilename, uint fl, IntPtr pdv);
+
         public static void InitFont()
         {
-            if (_isInitialized) return;
+            if (_isInitialized)
+            {
+                return;
+            }
+
             LoadRules();
         }
 
@@ -65,7 +86,10 @@ namespace ReaperEmporiumLocalization.Core
 
         public static bool TryApply(Text target)
         {
-            if (target == null || target.font == null) return false;
+            if (target == null || target.font == null)
+            {
+                return false;
+            }
 
             InitFont();
 
@@ -133,11 +157,11 @@ namespace ReaperEmporiumLocalization.Core
 
                 if (source.FullPath == null && source.TypeLabel == "系统字体")
                 {
-                    Logger.LogInfo($"[REL] 字体规则 {Path.GetFileName(jsonPath)} 未命中本地字体文件，尝试回退到同名系统字体：{baseName}");
+                    Logger.LogInfo($"[REL] 字体规则 {Path.GetFileName(jsonPath)} 未命中本地字体文件，将尝试回退到同名系统字体：{baseName}");
                 }
                 else
                 {
-                    Logger.LogInfo($"[REL] 字体规则 {Path.GetFileName(jsonPath)} 命中字体来源：{source.Label}（{source.TypeLabel}）");
+                    Logger.LogInfo($"[REL] 字体规则 {Path.GetFileName(jsonPath)} 命中字体系资源：{source.Label}（{source.TypeLabel}）");
                 }
 
                 try
@@ -300,7 +324,6 @@ namespace ReaperEmporiumLocalization.Core
             }
 
             List<FontConfig> templates = new List<FontConfig>();
-
             string primaryTargetFont = currentRuntimeFonts.Count > 0 ? currentRuntimeFonts[0] : DefaultTargetFontPlaceholder;
             List<string> additionalTargetFonts = currentRuntimeFonts.Count > 1
                 ? currentRuntimeFonts.Skip(1).ToList()
@@ -308,33 +331,36 @@ namespace ReaperEmporiumLocalization.Core
 
             if (embeddedFontNames.Count == 0)
             {
-                templates.Add(new FontConfig
-                {
-                    TargetFont = primaryTargetFont,
-                    TargetFonts = additionalTargetFonts,
-                    FontStyleStr = "Normal",
-                });
+                templates.Add(
+                    new FontConfig
+                    {
+                        TargetFont = primaryTargetFont,
+                        TargetFonts = additionalTargetFonts,
+                        FontStyleStr = "Normal",
+                    }
+                );
                 return templates;
             }
 
             string[] embeddedFonts = embeddedFontNames.ToArray();
-            templates.Add(new FontConfig
-            {
-                TargetFont = primaryTargetFont,
-                TargetFonts = additionalTargetFonts,
-                CustomFont = embeddedFonts[0],
-                FontStyleStr = "Normal",
-            });
+            templates.Add(
+                new FontConfig
+                {
+                    TargetFont = primaryTargetFont,
+                    TargetFonts = additionalTargetFonts,
+                    CustomFont = embeddedFonts[0],
+                    FontStyleStr = "Normal",
+                }
+            );
 
             for (int index = 1; index < embeddedFonts.Length; index++)
             {
-                string embeddedFontName = embeddedFonts[index];
                 templates.Add(
                     new FontConfig
                     {
                         TargetFont = primaryTargetFont,
                         TargetFonts = new List<string>(additionalTargetFonts),
-                        CustomFont = embeddedFontName,
+                        CustomFont = embeddedFonts[index],
                         FontStyleStr = "Normal",
                     }
                 );
@@ -395,7 +421,10 @@ namespace ReaperEmporiumLocalization.Core
                 yield return fontName;
             }
 
-            if (config.TargetFonts == null) yield break;
+            if (config.TargetFonts == null)
+            {
+                yield break;
+            }
 
             foreach (string targetFont in config.TargetFonts)
             {
@@ -408,7 +437,10 @@ namespace ReaperEmporiumLocalization.Core
 
         private static IEnumerable<string> SplitFontNames(string rawNames)
         {
-            if (string.IsNullOrWhiteSpace(rawNames)) yield break;
+            if (string.IsNullOrWhiteSpace(rawNames))
+            {
+                yield break;
+            }
 
             string[] parts = rawNames.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (string part in parts)
@@ -429,7 +461,10 @@ namespace ReaperEmporiumLocalization.Core
 
         private static string NormalizeFontName(string fontName)
         {
-            if (string.IsNullOrWhiteSpace(fontName)) return string.Empty;
+            if (string.IsNullOrWhiteSpace(fontName))
+            {
+                return string.Empty;
+            }
 
             string normalized = fontName.Trim();
             const string cloneSuffix = " (Clone)";
@@ -544,28 +579,44 @@ namespace ReaperEmporiumLocalization.Core
         private static Font? LoadDynamicFontFromFile(string fullPath)
         {
             string baseName = Path.GetFileNameWithoutExtension(fullPath);
-            string[] candidates = { fullPath, baseName, $"{baseName}-Regular", $"{baseName} Regular" };
-            Logger.LogInfo($"[REL] 尝试动态加载字体文件 {Path.GetFileName(fullPath)}，候选：{string.Join(", ", candidates)}");
+            List<string> candidates = BuildDynamicFontCandidates(fullPath, baseName);
+            bool registered = TryRegisterPrivateFont(fullPath);
+
+            Logger.LogInfo(
+                $"[REL] 尝试加载外部字体文件 {Path.GetFileName(fullPath)}，私有注册={(registered ? "成功/已注册" : "未注册")}，候选字体家族：{string.Join(", ", candidates)}"
+            );
 
             foreach (string candidate in candidates)
             {
                 try
                 {
                     Font font = Font.CreateDynamicFontFromOSFont(candidate, DynamicFontSize);
-                    if (font != null)
+                    if (font == null)
                     {
-                        font.name = baseName;
-                        Logger.LogInfo($"[REL] 动态字体加载成功：{Path.GetFileName(fullPath)} -> {candidate}");
-                        return font;
+                        continue;
                     }
+
+                    string loadedName = NormalizeFontName(font.name);
+                    if (!IsExpectedDynamicFontName(loadedName, candidates))
+                    {
+                        Logger.LogWarning(
+                            $"[REL] 外部字体候选 {candidate} 返回了可疑结果：Unity 实际给出 {font.name}，将继续尝试其它候选。"
+                        );
+                        continue;
+                    }
+
+                    Logger.LogInfo(
+                        $"[REL] 外部字体加载成功：{Path.GetFileName(fullPath)} -> 请求 {candidate} -> Unity 字体 {font.name}"
+                    );
+                    return font;
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogWarning($"[REL] 动态字体候选 {candidate} 加载失败：{ex.Message}");
+                    Logger.LogWarning($"[REL] 外部字体候选 {candidate} 加载失败：{ex.Message}");
                 }
             }
 
-            Logger.LogWarning($"[REL] 动态字体加载失败：{Path.GetFileName(fullPath)}");
+            Logger.LogWarning($"[REL] 外部字体加载失败：{Path.GetFileName(fullPath)}");
             return null;
         }
 
@@ -581,8 +632,7 @@ namespace ReaperEmporiumLocalization.Core
                     Font font = Font.CreateDynamicFontFromOSFont(candidate, DynamicFontSize);
                     if (font != null)
                     {
-                        font.name = candidate;
-                        Logger.LogInfo($"[REL] 系统字体加载成功：{candidate}");
+                        Logger.LogInfo($"[REL] 系统字体加载成功：{font.name}");
                         return font;
                     }
                 }
@@ -594,6 +644,254 @@ namespace ReaperEmporiumLocalization.Core
 
             Logger.LogWarning($"[REL] 未找到同名系统字体：{baseName}");
             return null;
+        }
+
+        private static List<string> BuildDynamicFontCandidates(string fullPath, string baseName)
+        {
+            List<string> candidates = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string familyName in ReadFontFamilyNamesFromFile(fullPath))
+            {
+                AddDynamicFontCandidate(candidates, seen, familyName);
+            }
+
+            AddDynamicFontCandidate(candidates, seen, baseName);
+            AddDynamicFontCandidate(candidates, seen, $"{baseName}-Regular");
+            AddDynamicFontCandidate(candidates, seen, $"{baseName} Regular");
+            return candidates;
+        }
+
+        private static void AddDynamicFontCandidate(List<string> candidates, HashSet<string> seen, string name)
+        {
+            string normalized = NormalizeFontName(name);
+            if (string.IsNullOrWhiteSpace(normalized) || !seen.Add(normalized))
+            {
+                return;
+            }
+
+            candidates.Add(normalized);
+        }
+
+        private static bool IsExpectedDynamicFontName(string loadedName, IReadOnlyCollection<string> candidates)
+        {
+            if (string.IsNullOrWhiteSpace(loadedName))
+            {
+                return false;
+            }
+
+            string normalizedLoadedName = NormalizeFontName(loadedName);
+            foreach (string candidate in candidates)
+            {
+                string normalizedCandidate = NormalizeFontName(candidate);
+                if (string.Equals(normalizedLoadedName, normalizedCandidate, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedLoadedName.IndexOf(normalizedCandidate, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    normalizedCandidate.IndexOf(normalizedLoadedName, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryRegisterPrivateFont(string fullPath)
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return false;
+            }
+
+            if (RegisteredPrivateFontFiles.Contains(fullPath))
+            {
+                return true;
+            }
+
+            try
+            {
+                int addedCount = AddFontResourceEx(fullPath, FrPrivate, IntPtr.Zero);
+                if (addedCount > 0)
+                {
+                    RegisteredPrivateFontFiles.Add(fullPath);
+                    Logger.LogInfo($"[REL] 已将外部字体注册为当前进程私有字体：{Path.GetFileName(fullPath)}");
+                    return true;
+                }
+
+                int errorCode = Marshal.GetLastWin32Error();
+                Logger.LogWarning(
+                    $"[REL] 外部字体私有注册未返回成功：{Path.GetFileName(fullPath)}，Win32={errorCode}。若字体已安装在系统中，后续仍会继续尝试按字体家族名加载。"
+                );
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"[REL] 外部字体私有注册失败 {Path.GetFileName(fullPath)}：{ex.Message}");
+            }
+
+            return false;
+        }
+
+        private static IReadOnlyList<string> ReadFontFamilyNamesFromFile(string fullPath)
+        {
+            try
+            {
+                using FileStream stream = File.OpenRead(fullPath);
+                using BinaryReader reader = new BinaryReader(stream);
+
+                uint signature = ReadUInt32BigEndian(reader);
+                if (signature == 0x74746366)
+                {
+                    Logger.LogWarning($"[REL] 暂不支持直接解析 TTC 字体家族名：{Path.GetFileName(fullPath)}");
+                    return Array.Empty<string>();
+                }
+
+                ushort numTables = ReadUInt16BigEndian(reader);
+                reader.ReadUInt16();
+                reader.ReadUInt16();
+                reader.ReadUInt16();
+
+                uint nameTableOffset = 0;
+                uint nameTableLength = 0;
+                for (int index = 0; index < numTables; index++)
+                {
+                    string tag = Encoding.ASCII.GetString(reader.ReadBytes(4));
+                    _ = ReadUInt32BigEndian(reader);
+                    uint offset = ReadUInt32BigEndian(reader);
+                    uint length = ReadUInt32BigEndian(reader);
+                    if (tag == "name")
+                    {
+                        nameTableOffset = offset;
+                        nameTableLength = length;
+                    }
+                }
+
+                if (nameTableOffset == 0 || nameTableLength == 0)
+                {
+                    return Array.Empty<string>();
+                }
+
+                stream.Position = nameTableOffset;
+                _ = ReadUInt16BigEndian(reader);
+                ushort recordCount = ReadUInt16BigEndian(reader);
+                ushort stringOffset = ReadUInt16BigEndian(reader);
+
+                List<FontNameRecord> records = new List<FontNameRecord>();
+                for (int index = 0; index < recordCount; index++)
+                {
+                    records.Add(
+                        new FontNameRecord
+                        {
+                            PlatformId = ReadUInt16BigEndian(reader),
+                            EncodingId = ReadUInt16BigEndian(reader),
+                            LanguageId = ReadUInt16BigEndian(reader),
+                            NameId = ReadUInt16BigEndian(reader),
+                            Length = ReadUInt16BigEndian(reader),
+                            Offset = ReadUInt16BigEndian(reader),
+                        }
+                    );
+                }
+
+                long stringBaseOffset = nameTableOffset + stringOffset;
+                List<string> families = new List<string>();
+                HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (FontNameRecord record in records.OrderByDescending(GetFontNamePriority))
+                {
+                    if (record.NameId != 16 && record.NameId != 1)
+                    {
+                        continue;
+                    }
+
+                    stream.Position = stringBaseOffset + record.Offset;
+                    byte[] data = reader.ReadBytes(record.Length);
+                    string decoded = DecodeFontName(record.PlatformId, data);
+                    string normalized = NormalizeFontName(decoded);
+                    if (string.IsNullOrWhiteSpace(normalized) || !seen.Add(normalized))
+                    {
+                        continue;
+                    }
+
+                    families.Add(normalized);
+                }
+
+                if (families.Count > 0)
+                {
+                    Logger.LogInfo($"[REL] 从字体文件 {Path.GetFileName(fullPath)} 解析到字体家族：{string.Join(", ", families)}");
+                }
+
+                return families;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"[REL] 解析字体文件家族名失败 {Path.GetFileName(fullPath)}：{ex.Message}");
+                return Array.Empty<string>();
+            }
+        }
+
+        private static int GetFontNamePriority(FontNameRecord record)
+        {
+            int score = 0;
+            if (record.NameId == 16)
+            {
+                score += 100;
+            }
+            else if (record.NameId == 1)
+            {
+                score += 50;
+            }
+
+            if (record.PlatformId == 3)
+            {
+                score += 20;
+            }
+            else if (record.PlatformId == 0)
+            {
+                score += 10;
+            }
+
+            if (record.LanguageId == 0x0409 || record.LanguageId == 0)
+            {
+                score += 5;
+            }
+
+            return score;
+        }
+
+        private static string DecodeFontName(ushort platformId, byte[] data)
+        {
+            if (data == null || data.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            string decoded = platformId == 0 || platformId == 3
+                ? Encoding.BigEndianUnicode.GetString(data)
+                : Encoding.UTF8.GetString(data);
+            return decoded.Replace("\0", string.Empty).Trim();
+        }
+
+        private static ushort ReadUInt16BigEndian(BinaryReader reader)
+        {
+            byte[] bytes = reader.ReadBytes(2);
+            if (bytes.Length < 2)
+            {
+                throw new EndOfStreamException();
+            }
+
+            return (ushort)((bytes[0] << 8) | bytes[1]);
+        }
+
+        private static uint ReadUInt32BigEndian(BinaryReader reader)
+        {
+            byte[] bytes = reader.ReadBytes(4);
+            if (bytes.Length < 4)
+            {
+                throw new EndOfStreamException();
+            }
+
+            return ((uint)bytes[0] << 24) |
+                   ((uint)bytes[1] << 16) |
+                   ((uint)bytes[2] << 8) |
+                   bytes[3];
         }
 
         private static IReadOnlyList<string> InspectAssetBundleFontNames(string fullPath)
@@ -679,7 +977,11 @@ namespace ReaperEmporiumLocalization.Core
 
             foreach (Font font in bundle.LoadAllAssets<Font>())
             {
-                if (font == null) continue;
+                if (font == null)
+                {
+                    continue;
+                }
+
                 if (seenIds.Add(font.GetInstanceID()))
                 {
                     fonts.Add(font);
@@ -688,7 +990,11 @@ namespace ReaperEmporiumLocalization.Core
 
             foreach (UnityEngine.Object asset in bundle.LoadAllAssets())
             {
-                if (asset is not Font font) continue;
+                if (asset is not Font font)
+                {
+                    continue;
+                }
+
                 if (seenIds.Add(font.GetInstanceID()))
                 {
                     fonts.Add(font);
