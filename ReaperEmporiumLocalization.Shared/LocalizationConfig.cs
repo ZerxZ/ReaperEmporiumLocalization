@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 
@@ -6,43 +6,104 @@ namespace ReaperEmporiumLocalization.Shared
 {
     public static class LocalizationConfig
     {
-        public static ConfigEntry<bool> EnableDllDump      { get; private set; } = null!;
+        private static bool _initialized;
+
+        public static ConfigEntry<bool> EnableDllDump { get; private set; } = null!;
         public static ConfigEntry<bool> EnableDatabaseDump { get; private set; } = null!;
         public static ConfigEntry<bool> EnableFontReplacement { get; private set; } = null!;
         public static ConfigEntry<bool> EnableAutoGenerateFontJson { get; private set; } = null!;
-        
-        // 【关键修改】使用普通 string 替代 UnityEngine.KeyCode
+        public static ConfigEntry<bool> EnableSceneDump { get; private set; } = null!;
+        public static ConfigEntry<bool> EnableSceneTranslation { get; private set; } = null!;
+        public static ConfigEntry<bool> EnableFontUsageDump { get; private set; } = null!;
         public static ConfigEntry<string> HotReloadKey { get; private set; } = null!;
-
-        private static bool _isInitialized = false;
 
         public static void Init()
         {
-            if (_isInitialized) return;
+            if (_initialized)
+            {
+                return;
+            }
 
-            string     configPath = Path.Combine(Paths.ConfigPath, "ReaperEmporiumLocalization.cfg");
-            ConfigFile config     = new ConfigFile(configPath, true);
+            string configPath = Path.Combine(Paths.ConfigPath, "ReaperEmporiumLocalization.cfg");
+            ConfigFile configFile = new ConfigFile(configPath, true);
 
-            EnableDllDump = config.Bind("Developer",      "EnableDllDump",      false, "【开发者】是否开启 DLL 硬编码日文文本提取？");
-            EnableDatabaseDump = config.Bind("Developer", "EnableDatabaseDump", false, "【开发者】是否开启 AssetBundle 原版数据库文本提取？");
-            EnableFontReplacement = config.Bind("Feature", "EnableFontReplacement", true, "是否启用 localization/fonts 下的字体替换规则？");
-            EnableAutoGenerateFontJson = config.Bind("Feature", "EnableAutoGenerateFontJson", false, "是否允许在扫描 localization/fonts 时为缺失规则的字体源自动生成同名 json 模板？");
-            
-            // 默认值改为字符串 "F5"
-            HotReloadKey = config.Bind("Developer", "HotReloadKey", "F5", "【开发者】热重载快捷键名称 (如 F5, F6, F12)");
-            // ==========================================
-            // 🎯 新增：自动创建汉化注入区文件夹骨架
-            // ==========================================
-            string rootPath       = Path.Combine(Paths.GameRootPath, "localization");
-            string dllStringsPath = Path.Combine(rootPath,           "dll_strings");
-            string databasePath   = Path.Combine(rootPath,           "database");
-            string fontsPath      = Path.Combine(rootPath,           "fonts"); // 新增字体文件夹路径
+            EnableDllDump = configFile.Bind(
+                "Developer",
+                "EnableDllDump",
+                false,
+                "是否将 DLL 中提取到的日文文本导出到 localization/dump/dll_strings.json。"
+            );
+            EnableDatabaseDump = configFile.Bind(
+                "Developer",
+                "EnableDatabaseDump",
+                false,
+                "是否将数据库 TSV 文本导出到 localization/dump/database。"
+            );
+            EnableSceneDump = configFile.Bind(
+                "Developer",
+                "EnableSceneDump",
+                false,
+                "是否在切场景后导出当前场景中的 Text/UguiNovelText 到 localization/dump/scene。"
+            );
+            EnableFontUsageDump = configFile.Bind(
+                "Developer",
+                "EnableFontUsageDump",
+                false,
+                "是否持续记录本体字体使用情况到 localization/dump/font_usage.json。"
+            );
 
-            // 一次性生成所有注入区文件夹
-            if (!Directory.Exists(dllStringsPath)) Directory.CreateDirectory(dllStringsPath);
-            if (!Directory.Exists(databasePath)) Directory.CreateDirectory(databasePath);
-            if (!Directory.Exists(fontsPath)) Directory.CreateDirectory(fontsPath); // 新增创建逻辑
-            _isInitialized = true;
+            EnableFontReplacement = configFile.Bind(
+                "Feature",
+                "EnableFontReplacement",
+                true,
+                "是否启用字体替换。"
+            );
+            EnableAutoGenerateFontJson = configFile.Bind(
+                "Feature",
+                "EnableAutoGenerateFontJson",
+                false,
+                "是否在扫描 localization/fonts 时，为缺失规则的字体源自动生成同名 json 模板。"
+            );
+            EnableSceneTranslation = configFile.Bind(
+                "Feature",
+                "EnableSceneTranslation",
+                false,
+                "是否从 localization/scene/{SceneName}.json 读取翻译并回写当前场景文本。"
+            );
+
+            HotReloadKey = configFile.Bind(
+                "HotReload",
+                "HotReloadKey",
+                "F5",
+                "运行时热重载翻译与字体规则的按键。"
+            );
+
+            EnsureDirectories();
+            configFile.Save();
+            _initialized = true;
+        }
+
+        private static void EnsureDirectories()
+        {
+            string localizationRoot = Path.Combine(Paths.GameRootPath, "localization");
+            EnsureDirectory(localizationRoot);
+            EnsureDirectory(Path.Combine(localizationRoot, "database"));
+            EnsureDirectory(Path.Combine(localizationRoot, "dll_strings"));
+            EnsureDirectory(Path.Combine(localizationRoot, "fonts"));
+            EnsureDirectory(Path.Combine(localizationRoot, "scene"));
+
+            string dumpRoot = Path.Combine(localizationRoot, "dump");
+            EnsureDirectory(dumpRoot);
+            EnsureDirectory(Path.Combine(dumpRoot, "database"));
+            EnsureDirectory(Path.Combine(dumpRoot, "scene"));
+        }
+
+        private static void EnsureDirectory(string path)
+        {
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
         }
     }
 }

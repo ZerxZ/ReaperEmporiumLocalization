@@ -1,10 +1,11 @@
-using HarmonyLib;
+using System.Collections.Generic;
 using BepInEx.Logging;
+using HarmonyLib;
 using ReaperEmporiumLocalization.Core;
+using ReaperEmporiumLocalization.Shared;
 using UnityEngine;
 using UnityEngine.UI;
 using Utage;
-using System.Collections.Generic;
 
 namespace ReaperEmporiumLocalization.Patchers
 {
@@ -18,8 +19,18 @@ namespace ReaperEmporiumLocalization.Patchers
         public static void Postfix(Text __instance)
         {
             LogCurrentFont(__instance);
-            bool changed = Apply(__instance);
-            if (changed && __instance != null && __instance.font != null)
+            FontUsageRecorder.RecordText(__instance);
+            SceneTextDumper.RecordAwakeText(__instance);
+
+            bool translated = SceneTextTranslator.TryApplyToText(__instance);
+            bool fontChanged = Apply(__instance);
+
+            if (translated && __instance != null)
+            {
+                Logger.LogInfo($"[REL] Awake 场景文本替换：{SceneTextSupport.GetObjectDescriptor(__instance)}");
+            }
+
+            if (fontChanged && __instance != null && __instance.font != null)
             {
                 Logger.LogInfo(
                     $"[REL] Awake 字体替换：对象={__instance.name}，当前字体={__instance.font.name}，样式={__instance.fontStyle}"
@@ -29,6 +40,11 @@ namespace ReaperEmporiumLocalization.Patchers
 
         public static bool Apply(Text target)
         {
+            if (!LocalizationConfig.EnableFontReplacement.Value)
+            {
+                return false;
+            }
+
             return FontManager.TryApply(target);
         }
 
