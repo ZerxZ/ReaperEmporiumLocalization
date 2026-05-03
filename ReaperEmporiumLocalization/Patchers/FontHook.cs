@@ -16,24 +16,31 @@ namespace ReaperEmporiumLocalization.Patchers
         private static readonly HashSet<string> LoggedAwakeFonts = new HashSet<string>();
 
         [HarmonyPostfix]
-        public static void Postfix(Text __instance)
+        public static void Postfix(UguiNovelText __instance)
         {
-            LogCurrentFont(__instance);
-            FontUsageRecorder.RecordText(__instance);
-            SceneTextDumper.RecordAwakeText(__instance);
-
-            bool translated = SceneTextTranslator.TryApplyToText(__instance);
-            bool fontChanged = Apply(__instance);
-
-            if (translated && __instance != null)
+            Text targetText = ResolveTargetText(__instance);
+            if (targetText == null)
             {
-                Logger.LogInfo($"[REL] Awake 场景文本替换：{SceneTextSupport.GetObjectDescriptor(__instance)}");
+                Logger.LogWarning("[REL] UguiNovelText.Awake 未找到可处理的 Text 组件。");
+                return;
             }
 
-            if (fontChanged && __instance != null && __instance.font != null)
+            LogCurrentFont(targetText);
+            FontUsageRecorder.RecordText(targetText);
+            SceneTextDumper.RecordAwakeText(targetText);
+
+            bool translated = SceneTextTranslator.TryApplyToText(targetText);
+            bool fontChanged = Apply(targetText);
+
+            if (translated)
+            {
+                Logger.LogInfo($"[REL] Awake 场景文本替换：{SceneTextSupport.GetObjectDescriptor(targetText)}");
+            }
+
+            if (fontChanged && targetText.font != null)
             {
                 Logger.LogInfo(
-                    $"[REL] Awake 字体替换：对象={__instance.name}，当前字体={__instance.font.name}，样式={__instance.fontStyle}"
+                    $"[REL] Awake 字体替换：对象={targetText.name}，当前字体={targetText.font.name}，样式={targetText.fontStyle}"
                 );
             }
         }
@@ -61,6 +68,36 @@ namespace ReaperEmporiumLocalization.Patchers
             }
 
             return changedCount;
+        }
+
+        private static Text ResolveTargetText(UguiNovelText novelText)
+        {
+            if (novelText == null)
+            {
+                return null;
+            }
+
+            if (novelText is Text selfText)
+            {
+                return selfText;
+            }
+
+            Text attachedText = novelText.GetComponent<Text>();
+            if (attachedText != null)
+            {
+                return attachedText;
+            }
+
+            Text[] childTexts = novelText.GetComponentsInChildren<Text>(true);
+            foreach (Text childText in childTexts)
+            {
+                if (childText != null)
+                {
+                    return childText;
+                }
+            }
+
+            return null;
         }
 
         private static void LogCurrentFont(Text target)

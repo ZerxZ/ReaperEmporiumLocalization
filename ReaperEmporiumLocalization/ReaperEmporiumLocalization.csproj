@@ -20,6 +20,9 @@
         <Reference Remove="$(BepInExFolder)/0Harmony20.dll" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Remove="Core\TTFLoaderMono.cs" />
+    </ItemGroup>
+    <ItemGroup>
       <ProjectReference Include="..\ReaperEmporiumLocalization.Shared\ReaperEmporiumLocalization.Shared.csproj" >
           <Private>false</Private>
       </ProjectReference>

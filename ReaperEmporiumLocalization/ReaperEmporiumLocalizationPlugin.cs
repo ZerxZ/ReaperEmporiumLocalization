@@ -104,7 +104,7 @@ namespace ReaperEmporiumLocalization
             if (LocalizationConfig.EnableSceneTranslation.Value)
             {
                 SceneTextTranslator.Reload();
-                Logger.LogInfo("[REL] 场景文本翻译缓存已清空，将按需重新读取 localization/scene。");
+                Logger.LogInfo("[REL] 场景文本翻译缓存已清空，将在 UguiNovelText.Awake 时按需重新读取 localization/scene。");
             }
 
             if (NeedRuntimeTextHook)
@@ -154,7 +154,6 @@ namespace ReaperEmporiumLocalization
 
             int fontUsageCount = 0;
             int dumpedCount = 0;
-            int translatedCount = 0;
             int refreshedCount = 0;
 
             if (LocalizationConfig.EnableFontUsageDump.Value)
@@ -167,18 +166,13 @@ namespace ReaperEmporiumLocalization
                 dumpedCount = SceneTextDumper.DumpScene(scene);
             }
 
-            if (LocalizationConfig.EnableSceneTranslation.Value)
-            {
-                translatedCount = SceneTextTranslator.ApplyScene(scene);
-            }
-
             if (LocalizationConfig.EnableFontReplacement.Value)
             {
                 refreshedCount = Patchers.FontHook.RefreshAllTexts();
             }
 
             Logger.LogInfo(
-                $"[REL] {reason}处理完成：场景={scene.name}，字体记录新增 {fontUsageCount} 条，场景导出 {dumpedCount} 条，场景回写 {translatedCount} 条，字体刷新 {refreshedCount} 个组件。"
+                $"[REL] {reason}处理完成：场景={scene.name}，字体记录新增 {fontUsageCount} 条，场景导出 {dumpedCount} 条，UguiNovelText.Awake 场景回写按需触发，字体刷新 {refreshedCount} 个组件。"
             );
         }
 
