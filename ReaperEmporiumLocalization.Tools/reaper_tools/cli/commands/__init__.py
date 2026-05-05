@@ -1,0 +1,31 @@
+"""CLI command exports and registration specs."""
+
+from reaper_tools.cli.commands.dump_workflow import build_dump_command, migrate_translations_command, package_final_command
+from reaper_tools.cli.commands.local_packages import download_command, install_command, pull_command, stats_command
+from reaper_tools.cli.commands.paratranz_remote import migrate_terms_command, upload_translations_command
+from reaper_tools.cli.common import RegisteredCommand
+from reaper_tools.cli.registry import (
+    BUILD_DUMP_COMMAND,
+    DOWNLOAD_COMMAND,
+    INSTALL_COMMAND,
+    MIGRATE_TERMS_COMMAND,
+    MIGRATE_TRANSLATIONS_COMMAND,
+    PACKAGE_FINAL_COMMAND,
+    PULL_COMMAND,
+    STATS_COMMAND,
+    UPLOAD_TRANSLATIONS_COMMAND,
+)
+
+ALL_COMMANDS = [
+    RegisteredCommand(DOWNLOAD_COMMAND, download_command),
+    RegisteredCommand(INSTALL_COMMAND, install_command),
+    RegisteredCommand(PULL_COMMAND, pull_command),
+    RegisteredCommand(STATS_COMMAND, stats_command),
+    RegisteredCommand(BUILD_DUMP_COMMAND, build_dump_command),
+    RegisteredCommand(MIGRATE_TRANSLATIONS_COMMAND, migrate_translations_command),
+    RegisteredCommand(MIGRATE_TERMS_COMMAND, migrate_terms_command),
+    RegisteredCommand(UPLOAD_TRANSLATIONS_COMMAND, upload_translations_command),
+    RegisteredCommand(PACKAGE_FINAL_COMMAND, package_final_command),
+]
+
+__all__ = ["ALL_COMMANDS"]

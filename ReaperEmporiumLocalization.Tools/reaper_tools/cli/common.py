@@ -2,19 +2,30 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import click
+
+from reaper_tools.app_context import AppContext, get_app_context
 
 HELP_OPTION_NAMES = ["-h", "--help"]
 
 
+@dataclass(frozen=True, slots=True)
+class RegisteredCommand:
+    """Command object paired with its user-facing metadata."""
+
+    metadata: object
+    command: click.Command
+
+
 def is_interactive_tty() -> bool:
-    """判断当前会话是否适合弹出交互式菜单。"""
+    """Return whether the current session should show interactive prompts."""
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def _localize_help_text(text: str) -> str:
-    """把 Click 默认帮助里的固定英文标题替换成中文。"""
+    """Translate Click's stock headings into Chinese."""
     return (
         text.replace("Usage:", "用法:")
         .replace("Options:", "选项:")
@@ -24,7 +35,7 @@ def _localize_help_text(text: str) -> str:
 
 
 class LocalizedCommand(click.Command):
-    """统一中文帮助输出与 `-h/--help` 体验。"""
+    """Click command with Chinese help text."""
 
     def get_help(self, ctx: click.Context) -> str:
         return _localize_help_text(super().get_help(ctx))
@@ -43,7 +54,7 @@ class LocalizedCommand(click.Command):
 
 
 class AliasedLocalizedGroup(click.Group, LocalizedCommand):
-    """支持英文别名的中文 Click Group。"""
+    """Chinese Click group that also resolves English aliases."""
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -73,7 +84,7 @@ class AliasedLocalizedGroup(click.Group, LocalizedCommand):
 
 
 def with_aliases(*aliases: str):
-    """给 Click 命令对象挂上英文别名元数据。"""
+    """Attach alias metadata to a Click command."""
 
     def decorator(command: click.Command) -> click.Command:
         command.aliases = tuple(aliases)
@@ -82,7 +93,15 @@ def with_aliases(*aliases: str):
     return decorator
 
 
-def register_commands(group: AliasedLocalizedGroup, commands: Iterable[click.Command]) -> None:
-    """把命令批量注册到根 Group。"""
-    for command in commands:
-        group.add_command(command, aliases=getattr(command, "aliases", ()))
+def register_commands(group: AliasedLocalizedGroup, commands: Iterable[RegisteredCommand]) -> None:
+    """Register command specs on the root group."""
+    for spec in commands:
+        group.add_command(spec.command, aliases=getattr(spec.metadata, "aliases", ()))
+
+
+def get_command_app_context() -> AppContext:
+    """Return the AppContext prepared by the CLI root group."""
+    ctx = click.get_current_context()
+    root = ctx.find_root()
+    obj = root.ensure_object(dict)
+    return obj.setdefault("app_context", get_app_context())

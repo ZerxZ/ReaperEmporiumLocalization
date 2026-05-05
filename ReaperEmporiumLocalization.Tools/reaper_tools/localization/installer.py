@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -8,10 +8,8 @@ from pathlib import Path
 from typing import Iterable
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from src.config.logging import logger
-from src.config.paths import paths
-from src.config.progress import ProgressBar
-from src.models import ParatranzData, paratranz_data_list_adapter
+from reaper_tools.app_context import AppContext, build_app_context, get_app_context
+from reaper_tools.models import ParatranzData, paratranz_data_list_adapter
 
 
 _CAB_SUFFIX_PATTERN = re.compile(r"-CAB-.*$")
@@ -68,6 +66,7 @@ def install_translation_packages(
     game_root: Path | str | None = None,
     clear: bool = True,
     show_progress: bool = False,
+    context: AppContext | None = None,
 ) -> InstallStats:
     """把本地翻译包合并并安装到游戏目录。
 
@@ -80,20 +79,21 @@ def install_translation_packages(
     if not package_roots:
         raise FileNotFoundError("未找到可安装的翻译包。")
 
-    target_game_root = paths.require_game_root(game_root)
+    ctx = context or build_app_context(project_paths=paths, app_logger=logger)
+    target_game_root = ctx.paths.require_game_root(game_root)
     localization_root = target_game_root / "localization"
     database_root = localization_root / "database"
     dll_root = localization_root / "dll_strings"
 
     if clear:
-        _clear_target(database_root, localization_root)
-        _clear_target(dll_root, localization_root)
+        _clear_target(database_root, localization_root, context=ctx)
+        _clear_target(dll_root, localization_root, context=ctx)
 
     database_by_category: dict[str, dict[str, ParatranzData]] = {}
     dll_by_original: dict[str, ParatranzData] = {}
     stats = InstallStats(packages=len(package_roots))
 
-    with ProgressBar(total=len(package_roots), enabled=show_progress, desc="读取翻译包", unit="包") as progress:
+    with ctx.progress(total=len(package_roots), enabled=show_progress, desc="读取翻译包", unit="包") as progress:
         for package_root in package_roots:
             _merge_package(package_root, database_by_category, dll_by_original, stats)
             progress.set_postfix_str(package_root.name)
@@ -103,7 +103,7 @@ def install_translation_packages(
     dll_root.mkdir(parents=True, exist_ok=True)
 
     categories = sorted(database_by_category)
-    with ProgressBar(total=len(categories), enabled=show_progress, desc="写入数据库", unit="文件") as progress:
+    with ctx.progress(total=len(categories), enabled=show_progress, desc="写入数据库", unit="文件") as progress:
         for category in categories:
             entries = sorted(database_by_category[category].values(), key=lambda item: item.key or item.original)
             _write_paratranz_file(database_root / f"{category}.json", entries)
@@ -116,7 +116,7 @@ def install_translation_packages(
         _write_paratranz_file(dll_root / "dll_strings.json", entries)
         stats.written_files += 1
 
-    logger.info("已将翻译安装到 {}", localization_root)
+    ctx.logger.info("已将翻译安装到 {}", localization_root)
     return stats
 
 
@@ -127,6 +127,7 @@ def package_final_localization(
     zip_path: Path | str | None = None,
     create_zip: bool = True,
     show_progress: bool = False,
+    context: AppContext | None = None,
 ) -> PackageStats:
     """把 MainGame/DLCGame 翻译包合并成游戏运行时 localization 目录。
 
@@ -135,9 +136,14 @@ def package_final_localization(
     localization/ 前缀，方便直接解压到游戏根目录。
     """
 
-    source = Path(source_root) if source_root is not None else paths.root / "build" / "migrated"
-    output = Path(output_root) if output_root is not None else paths.root / "build" / "package" / "localization"
-    archive = Path(zip_path) if zip_path is not None else paths.root / "build" / "package" / "ReaperEmporiumLocalization-localization.zip"
+    ctx = context or build_app_context(project_paths=paths, app_logger=logger)
+    source = Path(source_root) if source_root is not None else ctx.paths.root / "build" / "migrated"
+    output = Path(output_root) if output_root is not None else ctx.paths.root / "build" / "package" / "localization"
+    archive = (
+        Path(zip_path)
+        if zip_path is not None
+        else ctx.paths.root / "build" / "package" / "ReaperEmporiumLocalization-localization.zip"
+    )
 
     main_root = source / "MainGame"
     dlc_root = source / "DLCGame"
@@ -148,13 +154,14 @@ def package_final_localization(
     if output.resolve() == source.resolve():
         raise ValueError("最终打包输出目录不能和输入目录相同。")
 
-    _reset_output_dir(output)
+    _reset_output_dir(output, context=ctx)
     stats = PackageStats()
     stats.database_files, stats.database_entries = _package_database_tree(
         main_root / "database",
         dlc_root / "database",
         output / "database",
         show_progress=show_progress,
+        context=ctx,
     )
     stats.written_files += stats.database_files
     stats.dll_entries = _package_dll_strings(
@@ -169,7 +176,7 @@ def package_final_localization(
         _write_localization_zip(output, archive)
         stats.zip_path = archive
 
-    logger.info("已生成最终本地化包：{}", output)
+    ctx.logger.info("已生成最终本地化包：{}", output)
     return stats
 
 
@@ -304,6 +311,7 @@ def _package_database_tree(
     output_root: Path,
     *,
     show_progress: bool,
+    context: AppContext,
 ) -> tuple[int, int]:
     """按 database 相对路径合并 MainGame 完整包和 DLCGame 差异包。"""
     relative_files = sorted(
@@ -316,7 +324,7 @@ def _package_database_tree(
         key=lambda item: item.as_posix().casefold(),
     )
     entry_count = 0
-    with ProgressBar(total=len(relative_files), enabled=show_progress, desc="合并数据库", unit="文件") as progress:
+    with context.progress(total=len(relative_files), enabled=show_progress, desc="合并数据库", unit="文件") as progress:
         for relative in relative_files:
             main_file = main_database_root / relative
             dlc_file = dlc_database_root / relative
@@ -360,7 +368,7 @@ def _package_dll_strings(main_file: Path, dlc_file: Path, output_file: Path) -> 
     return len(entries)
 
 
-def _reset_output_dir(output: Path) -> None:
+def _reset_output_dir(output: Path, *, context: AppContext) -> None:
     """重建最终打包输出目录，避免旧产物混入。"""
     if output.exists():
         if len(output.resolve().parts) <= 2:
@@ -389,11 +397,11 @@ def _write_paratranz_file(target: Path, entries: list[ParatranzData]) -> None:
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
 
 
-def _clear_target(target: Path, localization_root: Path) -> None:
+def _clear_target(target: Path, localization_root: Path, *, context: AppContext) -> None:
     """清理旧安装结果；删除前先确认目标仍在 localization 目录内部。"""
     if not target.exists():
         return
-    paths.ensure_inside(target, localization_root)
+    context.paths.ensure_inside(target, localization_root)
     shutil.rmtree(target)
 
 
@@ -407,3 +415,8 @@ __all__ = [
     "read_paratranz_file",
     "summarize_translation_packages",
 ]
+
+_DEFAULT_CONTEXT = get_app_context()
+paths = _DEFAULT_CONTEXT.paths
+logger = _DEFAULT_CONTEXT.logger
+

@@ -1,7 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from src.apps.cli.main import main
+from reaper_tools.cli.main import main
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -210,3 +210,52 @@ reaper-tools 最终打包 --progress
 ```powershell
 reaper-tools 最终打包 --source-root build/dump --progress
 ```
+## 内部结构
+
+这一节面向维护者，说明当前项目里哪些部分属于稳定 CLI 契约，哪些只是内部实现。
+
+- 稳定入口
+  - `reaper-tools`
+  - `python main.py`
+  - 两者都会转发到 `reaper_tools.cli.main:main`
+- 稳定 CLI 契约
+  - 中文命令名
+  - 英文别名
+  - 现有参数名与 `--help` 口径
+- 非契约内容
+  - 旧的 `src.*` Python import 路径
+  - service / workflow / CLI 内部模块拆分方式
+
+当前代码布局：
+
+- `reaper_tools/cli/registry.py`
+  - 命令元数据单一真源，统一维护中文命令名、英文别名、帮助文案和交互 prompt
+- `reaper_tools/cli/commands/`
+  - Click 命令定义，只负责参数绑定和调用 workflow
+- `reaper_tools/app_context.py`
+  - 统一运行时依赖容器，集中提供 `settings / paths / logger / progress`
+- `reaper_tools/services/paratranz_api.py`
+  - 低层 ParaTranz HTTP API client
+- `reaper_tools/services/artifacts.py`
+  - 导出包下载、缓存、解压
+- `reaper_tools/services/sync.py`
+  - 远端文件同步、批量字符串操作
+- `reaper_tools/services/migration.py`
+  - 项目迁移、本地译文迁移、术语迁移、迁移结果上传
+- `reaper_tools/localization/paratranz.py`
+  - 兼容层 facade，对外继续提供 `Paratranz`，内部委托给拆分后的 services
+- `reaper_tools/localization/installer.py`
+  - 本地翻译包安装与最终运行时 localization 打包
+- `reaper_tools/localization/dump_builder.py`
+  - MainGame / DLCGame dump 差异构建
+
+测试原则：
+
+- `tests/test_paratranz_api.py`
+  - 继续覆盖 ParaTranz API、dry-run / execute 边界、迁移逻辑
+- `tests/test_installer.py` / `tests/test_dump_builder.py`
+  - 覆盖本地 workflow 行为
+- `tests/test_cli.py`
+  - 覆盖入口转发、命令注册表与 alias
+- `tests/test_config_paths.py` / `tests/test_services.py`
+  - 覆盖配置、路径安全和拆分后的 service 边界

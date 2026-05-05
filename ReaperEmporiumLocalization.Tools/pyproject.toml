@@ -19,8 +19,8 @@ dependencies = [
 ]
 
 [project.scripts]
-reaper-tools = "src.apps.cli.main:main"
+reaper-tools = "reaper_tools.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["reaper_tools*"]

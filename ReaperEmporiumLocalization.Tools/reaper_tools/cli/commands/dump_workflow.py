@@ -1,29 +1,30 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
 import click
 
-from src.apps.cli.common import HELP_OPTION_NAMES, LocalizedCommand, with_aliases
-from src.config import logger
-from src.localization.dump_builder import build_dump_diff
-from src.localization.installer import package_final_localization
-from src.localization.paratranz import Paratranz
+from reaper_tools.cli.common import HELP_OPTION_NAMES, LocalizedCommand, get_command_app_context, with_aliases
+from reaper_tools.cli.registry import BUILD_DUMP_COMMAND, MIGRATE_TRANSLATIONS_COMMAND, PACKAGE_FINAL_COMMAND
+from reaper_tools.localization.dump_builder import build_dump_diff
+from reaper_tools.localization.installer import package_final_localization
+from reaper_tools.localization.paratranz import Paratranz
 
 
-@with_aliases("build-dump")
+@with_aliases(*BUILD_DUMP_COMMAND.aliases)
 @click.command(
-    "构建差异",
+    BUILD_DUMP_COMMAND.name,
     cls=LocalizedCommand,
     context_settings={"help_option_names": HELP_OPTION_NAMES},
-    help="构建 MainGame/DLCGame 转储输出，并把 DLCGame 缩减为相对 MainGame 的差异词条。",
-    short_help="构建 MainGame/DLCGame 差异转储。",
+    help=BUILD_DUMP_COMMAND.help,
+    short_help=BUILD_DUMP_COMMAND.short_help,
 )
 @click.option("--progress", is_flag=True, help="显示构建进度条。")
 def build_dump_command(progress: bool) -> int:
     """从游戏转储数据构建可上传到 ParaTranz 的 MainGame/DLCGame 输出。"""
-    stats = build_dump_diff(show_progress=progress)
-    logger.success(
+    context = get_command_app_context()
+    stats = build_dump_diff(show_progress=progress, context=context)
+    context.logger.success(
         "已构建转储差异：MainGame {} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条；"
         "DLCGame 写入/读取 {} / {} 个数据库文件，{} / {} 条数据库词条，{} / {} 条 DLL 词条；"
         "diff 输出 {} 个数据库 diff 文件，{} 个 DLL diff 文件",
@@ -42,13 +43,13 @@ def build_dump_command(progress: bool) -> int:
     return 0
 
 
-@with_aliases("migrate-translations")
+@with_aliases(*MIGRATE_TRANSLATIONS_COMMAND.aliases)
 @click.command(
-    "迁移翻译",
+    MIGRATE_TRANSLATIONS_COMMAND.name,
     cls=LocalizedCommand,
     context_settings={"help_option_names": HELP_OPTION_NAMES},
-    help="把旧 ParaTranz 译文迁移到当前 build/dump 新结构，只生成本地 build/migrated。",
-    short_help="迁移旧 ParaTranz 译文到 build/migrated。",
+    help=MIGRATE_TRANSLATIONS_COMMAND.help,
+    short_help=MIGRATE_TRANSLATIONS_COMMAND.short_help,
 )
 @click.option("--source-root", type=click.Path(path_type=Path), help="旧 ParaTranz 本地导出目录；未传时默认使用 data/paratranz。")
 @click.option("--dump-root", type=click.Path(path_type=Path), help="新提取的 build/dump 目录；未传时默认使用 build/dump。")
@@ -65,7 +66,8 @@ def migrate_translations_command(
     progress: bool,
 ) -> int:
     """把旧 ParaTranz 译文迁移到当前 build/dump 新结构。"""
-    result = Paratranz().migrate_legacy_translations_to_dump(
+    context = get_command_app_context()
+    result = Paratranz(context=context).migrate_legacy_translations_to_dump(
         source_root=source_root,
         dump_root=dump_root,
         output_root=output_root,
@@ -74,7 +76,7 @@ def migrate_translations_command(
         show_progress=progress,
     )
     report = getattr(result, "report", {})
-    logger.success(
+    context.logger.success(
         "{}旧译文迁移：{} 个文件，迁移 {} 条译文，未匹配 {} 条，重复逻辑文件 {} 组，冲突 {} 处。结果目录：{}",
         "[dry-run] " if dry_run else "",
         result.planned,
@@ -85,17 +87,17 @@ def migrate_translations_command(
         report.get("output_root", output_root or "build/migrated"),
     )
     if not dry_run:
-        logger.info("迁移命令只生成本地文件，不会自动上传；请检查 build/migrated 后再决定是否上传到 ParaTranz。")
+        context.logger.info("迁移命令只生成本地文件，不会自动上传；请检查 build/migrated 后再决定是否上传到 ParaTranz。")
     return 0
 
 
-@with_aliases("package-final")
+@with_aliases(*PACKAGE_FINAL_COMMAND.aliases)
 @click.command(
-    "最终打包",
+    PACKAGE_FINAL_COMMAND.name,
     cls=LocalizedCommand,
     context_settings={"help_option_names": HELP_OPTION_NAMES},
-    help="把 MainGame/DLCGame 合并为运行时 localization 目录，并生成发布 zip。",
-    short_help="合并 MainGame/DLCGame 并生成最终包。",
+    help=PACKAGE_FINAL_COMMAND.help,
+    short_help=PACKAGE_FINAL_COMMAND.short_help,
 )
 @click.option("--source-root", type=click.Path(path_type=Path), help="包含 MainGame/DLCGame 的目录；未传时默认使用 build/migrated。")
 @click.option("--output-root", type=click.Path(path_type=Path), help="输出 localization 目录；未传时默认使用 build/package/localization。")
@@ -114,14 +116,16 @@ def package_final_command(
     progress: bool,
 ) -> int:
     """把 MainGame/DLCGame 合并为游戏运行时 localization 包。"""
+    context = get_command_app_context()
     stats = package_final_localization(
         source_root=source_root,
         output_root=output_root,
         zip_path=zip_path,
         create_zip=not no_zip,
         show_progress=progress,
+        context=context,
     )
-    logger.success(
+    context.logger.success(
         "已生成最终本地化包：{} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条，{} 个输出 JSON{}",
         stats.database_files,
         stats.database_entries,
@@ -130,3 +134,5 @@ def package_final_command(
         f"，zip：{stats.zip_path}" if stats.zip_path else "",
     )
     return 0
+
+

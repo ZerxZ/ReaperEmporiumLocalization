@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import tempfile
@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from src.localization.installer import install_translation_packages, package_final_localization
+from reaper_tools.localization.installer import install_translation_packages, package_final_localization
 
 
 class InstallerPathTests(unittest.TestCase):
@@ -174,3 +174,4 @@ class InstallerPathTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

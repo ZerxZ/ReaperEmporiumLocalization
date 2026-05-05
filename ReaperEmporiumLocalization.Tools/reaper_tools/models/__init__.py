@@ -1,7 +1,7 @@
-"""本地翻译数据模型和 ParaTranz API 模型导出。"""
+﻿"""本地翻译数据模型和 ParaTranz API 模型导出。"""
 
-from src.models.paratranz import ParatranzData, StageEnum, paratranz_data_list_adapter
-from src.models.paratranz_api import (
+from reaper_tools.models.paratranz import ParatranzData, StageEnum, paratranz_data_list_adapter
+from reaper_tools.models.paratranz_api import (
     ApiModel,
     BatchOperationResponse,
     BatchResult,
@@ -55,3 +55,4 @@ __all__ = [
     "UploadResult",
     "paratranz_data_list_adapter",
 ]
+

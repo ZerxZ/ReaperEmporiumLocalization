@@ -6,6 +6,8 @@ from typing import Any
 
 import click
 
+from reaper_tools.cli.registry import COMMAND_METADATA_BY_NAME
+
 
 def _load_inquirer():
     """懒加载 python-inquirer，并补齐它在 Python 3.11 下缺失的旧 collections 名称。"""
@@ -44,9 +46,17 @@ def choose_main_command(command_names: list[str]) -> str | None:
 
 def prompt_required_command_kwargs(command_name: str) -> dict[str, Any]:
     """只为带必填参数的命令补最少输入。"""
-    if command_name == "迁移术语":
-        return {"source_project_id": _prompt_int("请输入旧 ParaTranz 项目 ID：")}
-    return {}
+    metadata = COMMAND_METADATA_BY_NAME.get(command_name)
+    if metadata is None:
+        return {}
+
+    kwargs: dict[str, Any] = {}
+    for prompt in metadata.prompts:
+        if prompt.kind == "int":
+            kwargs[prompt.kwarg] = _prompt_int(prompt.message)
+            continue
+        raise click.ClickException(f"不支持的交互提示类型：{prompt.kind}")
+    return kwargs
 
 
 def confirm_remote_write(action_name: str, detail: str) -> bool:

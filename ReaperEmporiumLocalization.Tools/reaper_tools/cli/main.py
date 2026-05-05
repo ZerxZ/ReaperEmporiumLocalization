@@ -1,24 +1,14 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Sequence
 
 import click
 
-from src.apps.cli.commands import ALL_COMMANDS
-from src.apps.cli.common import AliasedLocalizedGroup, HELP_OPTION_NAMES, is_interactive_tty, register_commands
-from src.apps.cli.prompts import choose_main_command, prompt_required_command_kwargs
-
-MENU_COMMANDS = [
-    "下载包",
-    "安装包",
-    "拉取安装",
-    "查看统计",
-    "构建差异",
-    "迁移翻译",
-    "迁移术语",
-    "上传翻译",
-    "最终打包",
-]
+from reaper_tools.app_context import build_app_context
+from reaper_tools.cli.commands import ALL_COMMANDS
+from reaper_tools.cli.common import AliasedLocalizedGroup, HELP_OPTION_NAMES, is_interactive_tty, register_commands
+from reaper_tools.cli.prompts import choose_main_command, prompt_required_command_kwargs
+from reaper_tools.cli.registry import MENU_COMMAND_NAMES
 
 
 @click.group(
@@ -31,6 +21,7 @@ MENU_COMMANDS = [
 def cli(ctx: click.Context) -> None:
     """根命令组：无参数时进入交互菜单，否则按脚本模式执行。"""
     ctx.ensure_object(dict)
+    ctx.obj.setdefault("app_context", build_app_context())
     ctx.obj["interactive"] = is_interactive_tty()
 
     if ctx.invoked_subcommand is not None:
@@ -43,7 +34,7 @@ def cli(ctx: click.Context) -> None:
 
 def _run_interactive_menu(ctx: click.Context) -> None:
     """在交互式终端里弹出中文主菜单。"""
-    selected = choose_main_command(MENU_COMMANDS)
+    selected = choose_main_command(MENU_COMMAND_NAMES)
     if selected is None:
         click.echo("已取消。")
         return
@@ -70,3 +61,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     except click.Abort:
         click.echo("已取消。", err=True)
         return 1
+
+

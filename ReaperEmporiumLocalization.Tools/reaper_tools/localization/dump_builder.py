@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import shutil
@@ -9,10 +9,8 @@ from pathlib import Path
 from diff_match_patch import diff_match_patch
 from thefuzz import fuzz, process
 
-from src.config.logging import logger
-from src.config.paths import paths
-from src.config.progress import ProgressBar
-from src.models import ParatranzData
+from reaper_tools.app_context import AppContext, build_app_context, get_app_context
+from reaper_tools.models import ParatranzData
 
 from .installer import read_paratranz_file
 
@@ -28,6 +26,9 @@ DMP_DELETE = -1
 DATABASE_ORIGINAL_FUZZY_THRESHOLD = 85
 DATABASE_FUZZY_SEARCH_MAX_ENTRIES = 2000
 _DIFF_MATCH_PATCH = diff_match_patch()
+_DEFAULT_CONTEXT = get_app_context()
+paths = _DEFAULT_CONTEXT.paths
+logger = _DEFAULT_CONTEXT.logger
 
 
 @dataclass(slots=True)
@@ -56,7 +57,7 @@ class _EntryDiff:
     output_entry: ParatranzData
 
 
-def build_dump_diff(*, show_progress: bool = False) -> DumpBuildStats:
+def build_dump_diff(*, show_progress: bool = False, context: AppContext | None = None) -> DumpBuildStats:
     """构建可上传到 ParaTranz 的转储输出。
 
     MainGame 完整复制，DLCGame 只输出相对 MainGame 新增或不同的词条。
@@ -64,8 +65,9 @@ def build_dump_diff(*, show_progress: bool = False) -> DumpBuildStats:
     这样能避免 DLC 项目重复承载本体已有文本，也能减少后续人工翻译量。
     """
 
-    input_root = paths.root / "data" / "0-DumpData"
-    build_root = paths.root / "build"
+    ctx = context or build_app_context(project_paths=paths, app_logger=logger)
+    input_root = ctx.paths.root / "data" / "0-DumpData"
+    build_root = ctx.paths.root / "build"
     output_root = build_root / "dump"
     main_source = input_root / MAIN_GAME_DIR
     dlc_source = input_root / DLC_GAME_DIR
@@ -75,16 +77,17 @@ def build_dump_diff(*, show_progress: bool = False) -> DumpBuildStats:
 
     _require_dump_package(main_source, MAIN_GAME_DIR)
     _require_dump_package(dlc_source, DLC_GAME_DIR)
-    _reset_build_dir(build_root)
-    _prepare_output_dir(main_output, output_root)
-    _prepare_output_dir(dlc_output, output_root)
-    _prepare_output_dir(diff_output, output_root)
+    _reset_build_dir(build_root, context=ctx)
+    _prepare_output_dir(main_output, output_root, context=ctx)
+    _prepare_output_dir(dlc_output, output_root, context=ctx)
+    _prepare_output_dir(diff_output, output_root, context=ctx)
 
     stats = DumpBuildStats()
     stats.main_database_files, stats.main_database_entries = _copy_database_tree(
         main_source / DATABASE_DIR,
         main_output / DATABASE_DIR,
         show_progress=show_progress,
+        context=ctx,
     )
     stats.main_dll_entries = _copy_dll_strings(main_source, main_output)
 
@@ -95,6 +98,7 @@ def build_dump_diff(*, show_progress: bool = False) -> DumpBuildStats:
         diff_output / DATABASE_DIR,
         stats=stats,
         show_progress=show_progress,
+        context=ctx,
     )
     stats.dlc_dll_entries_read, stats.dlc_dll_entries_written, stats.diff_dll_files_written = _write_dlc_dll_diff(
         main_source / DLL_STRINGS_FILE,
@@ -103,7 +107,7 @@ def build_dump_diff(*, show_progress: bool = False) -> DumpBuildStats:
         diff_output / f"{DLL_STRINGS_FILE}.diff",
     )
 
-    logger.info("已构建转储差异到 {}", output_root)
+    ctx.logger.info("已构建转储差异到 {}", output_root)
     return stats
 
 def _require_dump_package(package_root: Path, name: str) -> None:
@@ -116,28 +120,34 @@ def _require_dump_package(package_root: Path, name: str) -> None:
         raise FileNotFoundError(f"{name} DLL 字符串文件不存在：{package_root / DLL_STRINGS_FILE}")
 
 
-def _reset_build_dir(build_root: Path) -> None:
+def _reset_build_dir(build_root: Path, *, context: AppContext) -> None:
     """每次构建前重建整个 build 目录，避免旧产物残留。"""
     if build_root.exists():
-        paths.ensure_inside(build_root, paths.root)
+        context.paths.ensure_inside(build_root, context.paths.root)
         shutil.rmtree(build_root)
     build_root.mkdir(parents=True, exist_ok=True)
 
 
-def _prepare_output_dir(target: Path, output_root: Path) -> None:
+def _prepare_output_dir(target: Path, output_root: Path, *, context: AppContext) -> None:
     """准备输出目录；清理旧目录前做双重路径保护。"""
     if target.exists():
-        paths.ensure_inside(target, output_root)
-        paths.ensure_inside(target, paths.root)
+        context.paths.ensure_inside(target, output_root)
+        context.paths.ensure_inside(target, context.paths.root)
         shutil.rmtree(target)
     target.mkdir(parents=True, exist_ok=True)
 
 
-def _copy_database_tree(source_root: Path, output_root: Path, *, show_progress: bool) -> tuple[int, int]:
+def _copy_database_tree(
+    source_root: Path,
+    output_root: Path,
+    *,
+    show_progress: bool,
+    context: AppContext,
+) -> tuple[int, int]:
     """完整复制 MainGame 数据库树，并返回文件/词条数量。"""
     files = _json_files(source_root)
     entry_count = 0
-    with ProgressBar(total=len(files), enabled=show_progress, desc="复制 MainGame 数据库", unit="文件") as progress:
+    with context.progress(total=len(files), enabled=show_progress, desc="复制 MainGame 数据库", unit="文件") as progress:
         for source_file in files:
             relative = source_file.relative_to(source_root)
             entries = read_paratranz_file(source_file)
@@ -163,6 +173,7 @@ def _write_dlc_database_diff(
     *,
     stats: DumpBuildStats,
     show_progress: bool,
+    context: AppContext | None = None,
 ) -> tuple[int, int]:
     """写出 DLC 数据库差异文件。
 
@@ -173,7 +184,8 @@ def _write_dlc_database_diff(
 
     dlc_files = _json_files(dlc_database_root)
     read_entries = 0
-    with ProgressBar(total=len(dlc_files), enabled=show_progress, desc="对比 DLCGame 数据库", unit="文件") as progress:
+    ctx = context or build_app_context(project_paths=paths, app_logger=logger)
+    with ctx.progress(total=len(dlc_files), enabled=show_progress, desc="对比 DLCGame 数据库", unit="文件") as progress:
         for dlc_file in dlc_files:
             relative = dlc_file.relative_to(dlc_database_root)
             dlc_entries = read_paratranz_file(dlc_file)
@@ -488,3 +500,4 @@ def _write_paratranz_file(target: Path, entries: list[ParatranzData]) -> None:
 
 
 __all__ = ["DumpBuildStats", "build_dump_diff"]
+

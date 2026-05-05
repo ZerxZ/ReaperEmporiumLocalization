@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import tempfile
@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.localization import dump_builder
-from src.localization.dump_builder import (
+from reaper_tools.localization import dump_builder
+from reaper_tools.localization.dump_builder import (
     DumpBuildStats,
     build_dump_diff,
     _DatabaseEntryMatcher,
@@ -15,7 +15,7 @@ from src.localization.dump_builder import (
     _write_dlc_database_diff,
     _write_dlc_dll_diff,
 )
-from src.models import ParatranzData
+from reaper_tools.models import ParatranzData
 
 
 class DumpBuilderDiffTests(unittest.TestCase):
@@ -285,3 +285,4 @@ class _FakePaths:
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,7 +1,5 @@
 # Reaper Emporium Localization
 
----
-
 [![Author](https://img.shields.io/badge/Author-Circle%20Meimitei-brown)][author]
 [![Game](https://img.shields.io/badge/Game-RJ01007980-red)][game-dlsite]
 [![GitHub release](https://img.shields.io/github/v/release/ZerxZ/ReaperEmporiumLocalization)][releases-latest]
@@ -10,38 +8,45 @@
 [![GitHub issues](https://img.shields.io/github/issues-raw/ZerxZ/ReaperEmporiumLocalization)][issues]
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-Discord 交流服务器：
+作者官方 Discord（日语交流）：
 
 [![](https://dcbadge.limes.pink/api/server/jUG6dBdhBT)][discord]
 
 ---
 
-<div align="center">
+## 请先阅读
 
-# 请在下载、安装或反馈问题前先阅读本说明文档
+本仓库提供《死神商館RExEX (RJ01007980)》的 BepInEx 动态本地化插件源码、构建配置和翻译维护工具。
 
-</div>
+- 游戏标题：死神商館RExEX
+- 作品 ID：RJ01007980
+- 游戏作者：サークル冥魅亭 (Circle Meimitei)
+- 作者主页：[Ci-en 创作者页面][author]
+- 游戏本体：[DLsite 作品页][game-dlsite]
+- 官方 Discord：[Discord][discord]（作者官方服务器，交流以日语为主）
+
+- 不包含游戏本体、商业素材或原始受版权保护文本
+- 请在合法拥有游戏的前提下使用
+- 建议优先使用本仓库 [Releases][releases-latest] 发布的构建产物
 
 ---
 
 ## 目录
 
 - [简介](#简介)
-  - [写在最前](#写在最前)
-  - [关于本仓库](#关于本仓库)
-  - [关于游戏本体与下载](#关于游戏本体与下载)
-  - [关于交流与反馈](#关于交流与反馈)
 - [核心特性](#核心特性)
-- [当前状态说明](#当前状态说明)
-- [玩家/翻译组使用说明](#玩家翻译组使用说明)
+- [当前运行状态](#当前运行状态)
+- [安装与目录结构](#安装与目录结构)
 - [翻译文件格式](#翻译文件格式)
 - [DLL 硬编码文本](#dll-硬编码文本)
-- [数据库/TSV 文本](#数据库tsv-文本)
+- [数据库 TSV 文本](#数据库-tsv-文本)
+- [场景文本](#场景文本)
 - [字体替换](#字体替换)
 - [配置文件](#配置文件)
 - [翻译工具与差异构建](#翻译工具与差异构建)
 - [源代码结构](#源代码结构)
-- [构建与安装](#构建与安装)
+- [构建](#构建)
+- [排错建议](#排错建议)
 - [免责声明](#免责声明)
 - [参考与致谢](#参考与致谢)
 - [License](#license)
@@ -50,110 +55,88 @@ Discord 交流服务器：
 
 ## 简介
 
-《死神商館RExEX》用 BepInEx 动态本地化引擎。
+本项目的目标是在**不修改游戏原始资源**的前提下，把翻译文本、场景文本和字体替换能力以外置文件形式注入运行中的游戏。
 
-本项目用于在不修改游戏原始资源的前提下，注入翻译文本、辅助导出待翻译文本，并为字体替换、数据库文本处理和 Paratranz 翻译流程提供基础框架。项目主要面向《死神商館RExEX(RJ01007980)》的中文本地化维护。
+项目当前主要包含三部分：
 
-### 写在最前
+1. `ReaperEmporiumLocalization.Preload`
+   - 在 `Assembly-CSharp.dll` 加载前处理 DLL 硬编码字符串
+2. `ReaperEmporiumLocalization`
+   - 主插件，负责数据库翻译、场景文本、字体替换、热重载
+3. `ReaperEmporiumLocalization.Tools`
+   - 翻译维护工具，用于统计、同步和差异构建
 
-- 游戏作者：サークル冥魅亭(Circle Meimitei)
-- 作者主页：[Ci-en 创作者页面][author]
-- 游戏本体：[DLsite 作品页 RJ01007980][game-dlsite]
-- 交流服务器：[Discord][discord]
-
-本仓库不包含游戏本体、商业资源或原始受版权保护文本。请在合法拥有游戏的前提下使用本项目。
-
-### 关于本仓库
-
-本仓库是《死神商館RExEX》的动态本地化插件源码与发布仓库，核心目标是让翻译文本以外置 JSON 的形式加载，而不是直接修改游戏本体资源。
-
-仓库内容主要包括：
-
-- BepInEx 主插件。
-- BepInEx Preloader 补丁。
-- 翻译 JSON 加载与原文匹配逻辑。
-- TSV 数据库文本替换逻辑。
-- 字体替换与 Dump 工具的预留框架。
-
-如需下载已构建版本，请优先使用本仓库 [Releases][releases-latest] 页面。来自其他渠道的二次打包版本可能被修改，本仓库无法保证其安全性和可用性。
-
-### 关于游戏本体与下载
-
-请先前往 [DLsite 作品页][game-dlsite] 获取正版游戏本体。本仓库不会提供游戏本体下载，也不会发布原始游戏资源。
-
-本项目面向的游戏：
-
-- 标题：死神商館RExEX
-- 作品 ID：RJ01007980
-- 作者：サークル冥魅亭(Circle Meimitei)
-
-### 关于交流与反馈
-
-如果在使用插件或汉化文本时遇到问题，建议在本仓库 [Issues][issues] 反馈。反馈时请尽量附上：
-
-- 使用的游戏版本与插件版本。
-- 问题截图或复现步骤。
-- `BepInEx/LogOutput.log` 中相关报错。
-- 使用的翻译 JSON 文件来源或修改说明。
-
-也可以加入 [Discord 交流服务器][discord] 讨论翻译、安装和排错问题。
+---
 
 ## 核心特性
 
-- **原文匹配**：运行时以日文原文作为匹配 Key，避免依赖脆弱的坐标、MD5 或资源哈希。只要原文不变，翻译就能继续命中。
-- **Paratranz 风格 JSON**：翻译文件使用 `key / original / translation / stage / context` 字段，方便和 Paratranz 或类似翻译平台衔接。
-- **DLL 硬编码文本替换**：通过 BepInEx Preloader 和 Mono.Cecil 在 `Assembly-CSharp.dll` 加载前扫描 `ldstr` 字符串，并按翻译 JSON 替换。
-- **数据库/TSV 文本替换**：运行时拦截 `AssetBundle.LoadAsset` 读取到的 `TextAsset`，扫描 TSV 单元格并按原文替换译文。
-- **无须重命名数据库翻译文件**：主插件会递归读取 `localization/database` 下所有 `.json` 文件，翻译人员可直接放入从翻译平台导出的 JSON。
-- **自动创建本地化目录**：首次启动后会自动生成 `localization/dll_strings`、`localization/database`、`localization/fonts` 等目录。
-- **开发者 Dump 辅助**：可开启 DLL 字符串导出；数据库 Dump 相关代码已保留，但当前默认 Hook 中未主动调用。
-- **字体替换框架**：已包含 `FontManager` 和 `FontHook`，当前主插件默认未启用，需要开发者按需打开。
-- **日志过滤插件**：附带 `IgnoreSpecificLog`，用于过滤一条已知 Unity 噪声日志。
+- 基于原文匹配的运行时翻译加载
+- DLL `ldstr` 硬编码字符串预加载替换
+- `TextAsset` / TSV 数据库文本运行时替换
+- `UguiNovelText.Awake` 场景文本按需回写
+- 数据驱动字体替换
+- `F5` 热重载翻译与字体规则
+- 本地化目录骨架自动创建
+- 旧版字体规则自动迁移到新格式并生成 `.bak` 备份
+- 可选字体调试日志与临时字号偏移
 
-## 当前状态说明
+---
 
-下面几项在源码中已经有配置或框架，但默认行为需要特别注意：
+## 当前运行状态
 
-- `HotReloadKey` 配置项已存在，默认值为 `F5`，但当前主插件中尚未实现按键监听和热重载流程。
-- `FontHook` 和 `FontManager` 已存在，但 `Plugin.Awake()` 中默认没有启用字体 Hook。
-- `EnableDatabaseDump` 配置项和 `DatabaseDumper` 已存在，但 `DatabaseHook` 中默认没有主动调用数据库 Dump。
-- 项目目标框架是 `netstandard2.1`，构建使用 `.NET SDK`，不是传统 `.NET Framework 4.7.2` 项目。
+和仓库早期版本相比，当前行为已经更新为：
 
-## 玩家/翻译组使用说明
+- `HotReloadKey` 已实现，默认可用，按 `F5` 会重载：
+  - `localization/database`
+  - `localization/dll_strings/dll_strings.json`
+  - 字体规则
+  - 场景文本翻译缓存
+- 当以下任一功能启用时，会自动挂载 `UguiNovelText.Awake` 补丁与场景工作流：
+  - `EnableFontReplacement`
+  - `EnableSceneDump`
+  - `EnableSceneTranslation`
+  - `EnableFontUsageDump`
+- 当前推荐并已验证的字体替换工作流为 `bundle_asset`
+- 已修复字体热重载时“已替换文本无法按原字体重新命中规则”的问题
 
-安装插件并首次启动游戏后，游戏根目录会自动生成 `localization` 文件夹。它是整个汉化补丁的注入区。
+---
+
+## 安装与目录结构
+
+首次启动后，游戏根目录下会自动生成 `localization` 目录骨架：
 
 ```text
 游戏根目录/
   localization/
-    database/                    表格翻译区
-      db_EventInfo.json
-      db_SystemMessage.json
-      ...
-    dll_strings/                 代码硬编码文本翻译区
+    database/
+    dll_strings/
       dll_strings.json
-    fonts/                       字体配置区，当前需要开发者启用 FontHook
-    dump/                        文本提取区，仅开启 Dump 后生成
+    fonts/
+    scene/
+    dump/
+      database/
+      scene/
 ```
 
-翻译人员通常只需要：
+常见使用流程：
 
-1. 从 Paratranz 或其他翻译平台下载 JSON 文件。
-2. 将数据库翻译 JSON 放入 `游戏根目录/localization/database/`。
-3. 将 DLL 硬编码翻译 JSON 放入 `游戏根目录/localization/dll_strings/dll_strings.json`。
-4. 重启游戏查看效果。
+1. 将数据库翻译 JSON 放入 `localization/database/`
+2. 将 DLL 硬编码翻译放入 `localization/dll_strings/dll_strings.json`
+3. 如需字体替换，将字体资源与规则文件放入 `localization/fonts/`
+4. 启动游戏验证效果
+5. 运行中修改后可按 `F5` 热重载
 
-当前版本暂未实现运行时 F5 热重载，因此修改 JSON 后需要重启游戏才能稳定验证。
+---
 
 ## 翻译文件格式
 
-翻译 JSON 是数组，每条记录格式如下：
+数据库翻译与 DLL 字符串翻译都使用 Paratranz 风格 JSON：
 
 ```json
 [
   {
     "key": "example_key",
-    "original": "日文原文",
+    "original": "日本語原文",
     "translation": "中文译文",
     "stage": 1,
     "context": ""
@@ -163,243 +146,360 @@ Discord 交流服务器：
 
 字段说明：
 
-- `key`：条目 ID。运行时实际匹配以 `original` 为准。数据库 Dump 使用当前 JSON 文件内的纯数字索引，如 `0`、`1`、`2`；DLL Dump 使用 `{类名}.{方法名}_{索引}`，如 `Game.Type.Method_0`。
-- `original`：日文原文，必须和游戏文本一致。
-- `translation`：译文，不能为空。
-- `stage`：翻译状态。只有 `stage >= 1` 的条目会被加载。
-- `context`：备注或上下文，可留空。
+- `key`：条目 ID。运行时主要仍以 `original` 匹配
+- `original`：必须和游戏中的原文一致
+- `translation`：译文
+- `stage`：仅 `stage >= 1` 会被加载
+- `context`：可选备注
 
-换行可写作 `\n`，加载时会自动转换为真实换行。
+换行请写成 `\n`。
+
+---
 
 ## DLL 硬编码文本
 
-将翻译文件放在：
+放置路径：
 
 ```text
 游戏根目录/localization/dll_strings/dll_strings.json
 ```
 
-Preloader 会在 `Assembly-CSharp.dll` 加载前扫描包含日文的 `ldstr` 字符串。如果能在 `dll_strings.json` 中找到相同 `original`，就会把字符串替换为 `translation`。
+Preloader 会在 `Assembly-CSharp.dll` 加载前扫描包含日文的 `ldstr` 字符串；当 `dll_strings.json` 中存在相同 `original` 时，会把它替换为对应 `translation`。
 
-如需导出 DLL 中的日文文本，启动游戏后编辑：
-
-```text
-游戏根目录/BepInEx/config/ReaperEmporiumLocalization.cfg
-```
-
-将：
+如果要导出 DLL 文本：
 
 ```ini
 [Developer]
 EnableDllDump = true
 ```
 
-再次启动游戏后，导出文件会生成在：
+导出结果：
 
 ```text
 游戏根目录/localization/dump/dll_strings.json
 ```
 
-DLL Dump 的 `key` 规则为 `{类名}.{方法名}_{索引}`，索引从同一类名和方法名下的第一个日文 `ldstr` 开始按 `0, 1, 2...` 递增。
+---
 
-## 数据库/TSV 文本
+## 数据库 TSV 文本
 
-将数据库翻译 JSON 放在：
+放置路径：
 
 ```text
 游戏根目录/localization/database/
 ```
 
-插件会递归读取该目录下所有 `.json` 文件，并把其中 `stage >= 1` 的译文加载到全局字典。游戏运行时加载 `TextAsset` 后，插件会扫描 TSV 单元格；如果某个单元格原文命中翻译字典，就返回替换后的 `TextAsset`。
+主插件会递归读取该目录下所有 `.json` 文件，并把其中 `stage >= 1` 的译文加载到全局字典。游戏运行时读取 `TextAsset` 后，插件会扫描 TSV 单元格；如果原文命中翻译字典，就返回替换后的 `TextAsset`。
 
-排查无效翻译时，优先检查：
+如果翻译未生效，优先检查：
 
-- JSON 是否为 UTF-8 编码。
-- `stage` 是否大于或等于 `1`。
-- `translation` 是否为空。
-- `original` 是否和游戏里的原文完全一致。
-- 原文中的换行是否正确写成 `\n`。
+- 文件是否为 UTF-8
+- `stage` 是否大于等于 `1`
+- `translation` 是否为空
+- `original` 是否与游戏原文完全一致
+
+---
+
+## 场景文本
+
+场景文本相关能力分为两类：
+
+1. 场景转储
+   - 开启 `EnableSceneDump`
+   - 导出当前场景中的 `Text` / `UguiNovelText`
+2. 场景回写
+   - 开启 `EnableSceneTranslation`
+   - 读取 `localization/scene/{SceneName}.json`
+   - 在 `UguiNovelText.Awake` 时按需回写
+
+当前场景翻译缓存支持热重载；按 `F5` 后，下次命中 `Awake` 会重新读取对应场景文件。
+
+---
 
 ## 字体替换
 
-项目中保留了数据驱动字体替换框架，配置目录为：
+字体规则目录：
 
 ```text
 游戏根目录/localization/fonts/
 ```
 
-字体配置 JSON 使用：
+当前 README 仅说明 `bundle_asset` 工作流。
+
+### 规则格式
+
+当前显式规则格式如下：
 
 ```json
 [
   {
-    "target_font": "原字体名",
-    "font_style": "Normal"
+    "target_fonts": ["FOT-NewRodinPro-B", "TT_Yuruka-UB"],
+    "font_style": "Normal",
+    "source_mode": "bundle_asset",
+    "source_file": "ChironGoRoundTC-500M.bundle",
+    "source_font": "ChironGoRoundTC-500M"
   }
 ]
 ```
 
-当前 `FontHook` 在主插件中默认未启用。如需启用字体替换，需要在 `Plugin.Awake()` 中启用对应 Harmony Patch，并准备 Unity 可加载的字体 AssetBundle。
+字段说明：
+
+- `target_fonts`
+  - 需要被替换的原字体名列表
+  - 这是当前主格式
+- `font_style`
+  - 目标 `UnityEngine.FontStyle`
+- `source_mode`
+  - `bundle_asset`
+- `source_file`
+  - 相对 `localization/fonts/` 的文件名
+  - `bundle_asset` 使用
+- `source_font`
+  - bundle 内具体 `Font` 资源名
+  - `bundle_asset` 使用
+
+### `bundle_asset` 示例
+
+```json
+[
+  {
+    "target_fonts": ["FOT-NewRodinPro-B"],
+    "font_style": "Normal",
+    "source_mode": "bundle_asset",
+    "source_file": "ChironGoRoundTC-500M.bundle",
+    "source_font": "ChironGoRoundTC-500M"
+  }
+]
+```
+
+### 运行时行为
+
+- `bundle_asset`
+  - 从 AssetBundle 中读取 `Font`
+
+### 重要说明
+
+- `target_font` 仍支持作为**旧格式兼容输入**
+- 新规则与自动生成规则会优先写出 `target_fonts`
+- 旧版字体规则在加载时会：
+  - 自动迁移为显式格式
+  - 原文件同目录生成 `*.json.bak`
+
+### 自动生成规则
+
+当：
+
+```ini
+[Feature]
+EnableAutoGenerateFontJson = true
+```
+
+插件会为 `localization/fonts/` 中缺少同名规则的字体来源自动生成默认模板。
+
+### 热重载
+
+修改字体规则或字体文件后：
+
+1. 运行游戏
+2. 按 `F5`
+3. 插件会重载字体规则并刷新当前场景文本
+
+### 字体调试
+
+为方便排查“字体改了但画面看起来没变”，新增了两个调试选项：
+
+```ini
+[Developer]
+EnableFontDebugLogging = true
+FontDebugSizeOffset = 4
+```
+
+- `EnableFontDebugLogging`
+  - 打印命中文本的字体、字号、Best Fit、Rect 等信息
+- `FontDebugSizeOffset`
+  - 仅调试用
+  - 在应用替换时临时给当前 `Text.fontSize` 增加偏移
+  - `0` 表示关闭
+
+日志中可以重点关注：
+
+- `bundle_asset 加载成功`
+- `FontDebug`
+
+---
 
 ## 配置文件
 
-首次运行后，会在 BepInEx 配置目录生成：
+配置文件路径：
 
 ```text
 游戏根目录/BepInEx/config/ReaperEmporiumLocalization.cfg
 ```
 
-当前配置项：
+主要配置项：
 
 ```ini
 [Developer]
-
-# 是否开启 DLL 硬编码日文文本提取？
 EnableDllDump = false
-
-# 是否开启 AssetBundle 数据库日文提取？
-# 当前为预留配置，默认 Hook 中未主动调用 DatabaseDumper。
 EnableDatabaseDump = false
+EnableSceneDump = false
+EnableFontUsageDump = false
+EnableFontDebugLogging = false
+FontDebugSizeOffset = 0
 
-# 热重载快捷键名称。
-# 当前为预留配置，主插件尚未实现按键监听。
+[Feature]
+EnableFontReplacement = true
+EnableAutoGenerateFontJson = false
+EnableSceneTranslation = false
+
+[HotReload]
 HotReloadKey = F5
 ```
 
-普通玩家请勿开启 Dump 功能。Dump 过程会产生额外磁盘读写，主要用于开发和文本提取。
+说明：
+
+- `EnableFontReplacement`
+  - 启用字体规则加载、字体替换和场景刷新
+- `EnableSceneDump`
+  - 导出当前场景文本
+- `EnableSceneTranslation`
+  - 启用场景回写
+- `EnableFontUsageDump`
+  - 记录本体字体使用情况
+- `HotReloadKey`
+  - 运行时热重载按键
+
+---
 
 ## 翻译工具与差异构建
 
-`ReaperEmporiumLocalization.Tools` 是翻译维护用的 Python 工具目录，主要用于下载/安装翻译包、统计本地 JSON、构建 MainGame/DLCGame 的差异转储，以及和 ParaTranz API 对接。详细命令说明请看 [`ReaperEmporiumLocalization.Tools/README.md`](ReaperEmporiumLocalization.Tools/README.md)。
+`ReaperEmporiumLocalization.Tools` 是翻译维护用工具目录，详细说明见：
 
-常用入口：
+- [`ReaperEmporiumLocalization.Tools/README.md`](ReaperEmporiumLocalization.Tools/README.md)
+
+常见入口：
 
 ```powershell
 cd ReaperEmporiumLocalization.Tools
 .\.venv\Scripts\python.exe main.py 构建差异
 ```
 
-差异构建读取：
-
-```text
-ReaperEmporiumLocalization.Tools/data/0-DumpData/
-  MainGame/
-    database/{bundleName}/*.json
-    dll_strings.json
-  DLCGame/
-    database/{bundleName}/*.json
-    dll_strings.json
-```
-
-输出到：
-
-```text
-ReaperEmporiumLocalization.Tools/build/dump/
-  MainGame/                 MainGame 完整规范化 JSON
-  DLCGame/                  可上传/同步的 DLC 差异 JSON
-  diff/                     人类可读的 .diff 差异文件
-```
-
-构建规则：
-
-- 每次构建前会删除并重建整个 `build` 目录，避免旧产物混入。
-- `MainGame` 输出完整 JSON，作为 DLC 差异判断的基准。
-- 数据库 JSON 推荐路径为 `database/{bundleName}/{assetName}.json`；`key` 只是转储文件里的顺序编号，不作为主要身份，匹配优先级以 `original` 为主。
-- 数据库差异会先判断 MainGame/DLCGame 数组数量是否对等；等长时用相同索引辅助判断原文是否被修改。
-- 原文轻微变化时使用 `thefuzz` 做模糊匹配，但只会在尚未被精确匹配占用的 MainGame 词条里搜索，避免同一条 MainGame 原文被多个 DLC 词条复用。
-- 已匹配到 MainGame 的 DLC 数据库词条会改用 MainGame 的 `key`；完全新增的 DLC 词条会按当前 MainGame 文件顺序，从文件顺序里最后一个数字 `key` 后继续编号。
-- `diff/database/*.json.diff` 基于同一套匹配结果生成，只展示需要同步的词条，不再直接对完整数组做行级 diff，避免数组删减/重排造成大段误导性差异。
-- `.diff` 文件头使用 `MainGame/...` 和 `DLCGame/...` 相对路径，不写入本机绝对路径。
-- DLL 字符串使用 `{类名}.{方法名}_{索引}` 作为 `key`，差异判断按 `key + original` 精确匹配，不兼容旧 `_IL_` key 迁移规则。
+---
 
 ## 源代码结构
-
-为了避免 Preloader 层错误引用 Unity 运行时类型，本项目采用三层分离结构。
 
 ```text
 ReaperEmporiumLocalization.Shared/
   Models/
-    ParatranzData.cs              Paratranz 风格 JSON 数据模型
-    StageEnum.cs                  翻译状态枚举
-    FontConfig.cs                 字体配置模型
-  LocalizationConfig.cs           BepInEx 配置读取，自动生成 localization 目录骨架
-  TranslationManager.cs           JSON 加载与“原文 -> 译文”全局字典
+    FontConfig.cs
+    ParatranzData.cs
+    StageEnum.cs
+  LocalizationConfig.cs
+  TranslationManager.cs
 
 ReaperEmporiumLocalization.Preload/
-  Patcher.cs                      Mono.Cecil 前置补丁，替换 Assembly-CSharp.dll 硬编码文本
+  Patcher.cs
 
 ReaperEmporiumLocalization/
   ReaperEmporiumLocalizationPlugin.cs
-                                  主插件入口，初始化配置、加载数据库翻译、注册 Hook
   Core/
-    AssetCache.cs                 TextAsset 原文/译文缓存
-    DatabaseDumper.cs             开发者工具，提取 TSV 日文文本为 JSON
-    FontManager.cs                字体 AssetBundle 与字体配置加载
-    TranslationProvider.cs        按 bundle/asset 路径读取外部 TextAsset 的辅助类
-    TsvTranslator.cs              TSV 单元格扫描与原文替换
+    AssetCache.cs
+    DatabaseDumper.cs
+    FontManager.cs
+    SceneTextDumper.cs
+    SceneTextSupport.cs
+    SceneTextTranslator.cs
+    TranslationProvider.cs
+    TsvTranslator.cs
   Patchers/
-    DatabaseHook.cs               拦截 AssetBundle.LoadAsset 并注入翻译
-    FontHook.cs                   拦截 UguiNovelText.Awake 以替换字体，默认未启用
+    DatabaseHook.cs
+    FontHook.cs
 
 IgnoreSpecificLog/
-  IgnoreSpecificLogPlugin.cs      可选日志过滤插件
+  IgnoreSpecificLogPlugin.cs
 ```
 
-## 构建与安装
+---
+
+## 构建
 
 环境要求：
 
 - Windows
-- 已安装《死神商館RExEX》
+- 已安装游戏本体
 - 已为游戏安装 BepInEx
 - .NET SDK 6.0 或更高版本
 
-构建时需要能访问游戏目录中的：
+项目默认假设仓库位于：
 
-- `BepInEx/core`
-- `死神商館RExEX_Data/Managed`
+```text
+游戏根目录/Dev/ReaperEmporiumLocalization
+```
 
-构建步骤：
+`GameFolder.props` 默认内容：
 
-1. 确认 `GameFolder.props` 中的 `GameFolder` 指向游戏根目录。
+```xml
+<Project>
+    <PropertyGroup>
+        <GameFolder>..\..\..\</GameFolder>
+    </PropertyGroup>
+</Project>
+```
 
-   当前默认值为：
+如目录结构不同，请先修改 `GameFolder.props`。
 
-   ```xml
-   <GameFolder>..\..\..\</GameFolder>
-   ```
+构建命令：
 
-   这适用于仓库位于 `游戏根目录/Dev/ReaperEmporiumLocalization` 的布局。如果你的目录不同，请改成实际游戏路径。
+```powershell
+dotnet build ReaperEmporiumLocalization.sln -c Release
+```
 
-2. 使用 Visual Studio、Rider 或命令行构建解决方案：
+构建完成后，PostBuild 会自动复制输出到：
 
-   ```powershell
-   dotnet build ReaperEmporiumLocalization.sln -c Release
-   ```
+- `BepInEx/plugins/ReaperEmporiumLocalization`
+- `BepInEx/patchers/ReaperEmporiumLocalization`
 
-3. 构建完成后，项目的 PostBuild 会自动复制输出：
+---
 
-   - 主插件复制到 `BepInEx/plugins/ReaperEmporiumLocalization`
-   - Preloader 补丁复制到 `BepInEx/patchers/ReaperEmporiumLocalization`
-   - `IgnoreSpecificLog` 复制到 `BepInEx/plugins/ReaperEmporiumLocalization`
+## 排错建议
 
-4. 启动一次游戏，生成配置文件和 `localization` 目录骨架。
+### 修改翻译后无效
+
+- 确认 `stage >= 1`
+- 确认 `original` 与游戏原文完全一致
+- 按 `F5` 热重载，或重启游戏
+
+### 修改字体规则后画面没变
+
+- 看日志是否真的命中了新的 `source_mode`
+- 打开 `EnableFontDebugLogging`
+- 必要时把 `FontDebugSizeOffset` 设为 `4` 或 `6` 做可视验证
+
+### 构建时报复制失败
+
+通常是游戏进程或 BepInEx 正占用输出 DLL。关闭游戏后重新构建即可。
+
+---
 
 ## 免责声明
 
 1. 本仓库仅提供本地化插件源码、构建产物与相关说明，不提供游戏本体、商业资源或原始受版权保护文本。
-2. 请先通过 [DLsite 作品页][game-dlsite] 合法获取游戏本体。未满 18 岁请勿访问、下载或游玩相关内容。
-3. 本项目仅供学习、交流和本地化研究使用。使用者因二次打包、公开传播、商业使用或不当修改造成的后果，由使用者自行承担。
-4. 本仓库无法保证第三方平台发布的整合包、修改版或转载版本安全可靠。建议仅使用本仓库 [Releases][releases-latest] 页面提供的版本。
-5. 反馈问题前请确认游戏本体、BepInEx、插件和翻译文件来源明确，并尽量提供日志与复现步骤。
+2. 请先通过 [DLsite 作品页][game-dlsite] 合法获取游戏本体。
+3. 本项目仅供学习、交流和本地化研究使用。
+4. 第三方整合包、转载包、修改版带来的风险由使用者自行承担。
+
+---
 
 ## 参考与致谢
 
-本项目参考了 [MagicalAstrogy/ReaperEmporiumTrans](https://github.com/MagicalAstrogy/ReaperEmporiumTrans) 对《死神商館RExEX(RJ01007980)》翻译与文本处理方向的公开探索，特此感谢。
+- [MagicalAstrogy/ReaperEmporiumTrans](https://github.com/MagicalAstrogy/ReaperEmporiumTrans)
+- [PoP 中文本地化发布库][github-pop]
+- BepInEx
+- Harmony
+- Mono.Cecil
+- Newtonsoft.Json
 
-README 格式参考了 [PoP 中文本地化发布库][github-pop] 的发布页结构。
-
-同时感谢 BepInEx、Harmony、Mono.Cecil、Newtonsoft.Json 等开源项目提供的基础能力。
+---
 
 ## License
 

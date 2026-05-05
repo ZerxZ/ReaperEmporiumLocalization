@@ -1,13 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
 import click
 
-from src.apps.cli.common import HELP_OPTION_NAMES, LocalizedCommand, is_interactive_tty, with_aliases
-from src.apps.cli.prompts import confirm_remote_write
-from src.config import logger
-from src.localization.paratranz import Paratranz
+from reaper_tools.cli.common import HELP_OPTION_NAMES, LocalizedCommand, get_command_app_context, is_interactive_tty, with_aliases
+from reaper_tools.cli.prompts import confirm_remote_write
+from reaper_tools.cli.registry import MIGRATE_TERMS_COMMAND, UPLOAD_TRANSLATIONS_COMMAND
+from reaper_tools.localization.paratranz import Paratranz
 
 
 def _confirm_execute_if_needed(action_name: str, detail: str, execute: bool) -> None:
@@ -18,13 +18,13 @@ def _confirm_execute_if_needed(action_name: str, detail: str, execute: bool) -> 
         raise click.Abort()
 
 
-@with_aliases("migrate-terms")
+@with_aliases(*MIGRATE_TERMS_COMMAND.aliases)
 @click.command(
-    "迁移术语",
+    MIGRATE_TERMS_COMMAND.name,
     cls=LocalizedCommand,
     context_settings={"help_option_names": HELP_OPTION_NAMES},
-    help="把旧 ParaTranz 项目的术语迁移到新 ParaTranz 项目；默认只预览，不直接写入。",
-    short_help="迁移旧 ParaTranz 项目术语。",
+    help=MIGRATE_TERMS_COMMAND.help,
+    short_help=MIGRATE_TERMS_COMMAND.short_help,
 )
 @click.option("--source-project-id", type=int, required=True, help="旧 ParaTranz 项目 ID。")
 @click.option("--target-project-id", type=int, help="新 ParaTranz 项目 ID；未传时默认使用 .env 里的 PARATRANZ_PROJECT_ID。")
@@ -37,7 +37,8 @@ def migrate_terms_command(
     progress: bool,
 ) -> int:
     """把旧 ParaTranz 项目的术语迁移到新项目。"""
-    api = Paratranz()
+    context = get_command_app_context()
+    api = Paratranz(context=context)
     resolved_target_project_id = target_project_id or api.project_id
     _confirm_execute_if_needed(
         "迁移术语",
@@ -50,7 +51,7 @@ def migrate_terms_command(
         dry_run=not execute,
         show_progress=progress,
     )
-    logger.success(
+    context.logger.success(
         "{}项目术语迁移：源项目 {} -> 目标项目 {}，共 {} 页，{} 条术语{}",
         "[dry-run] " if not execute else "",
         source_project_id,
@@ -60,19 +61,19 @@ def migrate_terms_command(
         f"，成功迁移 {result.migrated_entries} 条" if execute else "",
     )
     if result.errors:
-        logger.warning("术语迁移过程中有 {} 个失败页：{}", len(result.errors), " | ".join(result.errors))
+        context.logger.warning("术语迁移过程中有 {} 个失败页：{}", len(result.errors), " | ".join(result.errors))
     if not execute:
-        logger.info("默认只预览计划；确认无误后加 --execute 才会写入目标 ParaTranz 项目。")
+        context.logger.info("默认只预览计划；确认无误后加 --execute 才会写入目标 ParaTranz 项目。")
     return 0
 
 
-@with_aliases("upload-translations")
+@with_aliases(*UPLOAD_TRANSLATIONS_COMMAND.aliases)
 @click.command(
-    "上传翻译",
+    UPLOAD_TRANSLATIONS_COMMAND.name,
     cls=LocalizedCommand,
     context_settings={"help_option_names": HELP_OPTION_NAMES},
-    help="把 build/migrated 上传到目标 ParaTranz 项目，并把冲突候选逐次写入文件修订历史后再恢复最终译文。",
-    short_help="上传 build/migrated 到目标 ParaTranz 项目。",
+    help=UPLOAD_TRANSLATIONS_COMMAND.help,
+    short_help=UPLOAD_TRANSLATIONS_COMMAND.short_help,
 )
 @click.option("--source-root", type=click.Path(path_type=Path), help="待上传的迁移结果目录；未传时默认使用 build/migrated。")
 @click.option("--report-path", type=click.Path(path_type=Path), help="迁移报告路径；未传时默认使用 build/migrated/migration_report.json。")
@@ -87,7 +88,8 @@ def upload_translations_command(
     progress: bool,
 ) -> int:
     """把人工检查后的迁移结果上传到新 ParaTranz 项目。"""
-    api = Paratranz()
+    context = get_command_app_context()
+    api = Paratranz(context=context)
     resolved_project_id = project_id or api.project_id
     _confirm_execute_if_needed(
         "上传翻译",
@@ -101,7 +103,7 @@ def upload_translations_command(
         dry_run=not execute,
         show_progress=progress,
     )
-    logger.success(
+    context.logger.success(
         "{}上传翻译：目标项目 {}，首轮文件 {} / {} / {} / {}（计划 / 成功 / 失败 / 跳过），"
         "冲突记录 {} / {} / {} / {}（计划 / 成功 / 失败 / 跳过），"
         "最终回写 {} / {} / {}（计划 / 成功 / 失败）。",
@@ -120,7 +122,9 @@ def upload_translations_command(
         result.finalize_failed,
     )
     if result.errors:
-        logger.warning("上传过程中有 {} 条提示或失败记录：{}", len(result.errors), " | ".join(result.errors))
+        context.logger.warning("上传过程中有 {} 条提示或失败记录：{}", len(result.errors), " | ".join(result.errors))
     if not execute:
-        logger.info("默认只预览计划；确认无误后加 --execute 才会真正写入目标 ParaTranz 项目。")
+        context.logger.info("默认只预览计划；确认无误后加 --execute 才会真正写入目标 ParaTranz 项目。")
     return 0
+
+

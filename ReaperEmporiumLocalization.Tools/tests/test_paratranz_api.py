@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import tempfile
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import httpx
 
-from src.localization.paratranz import Paratranz
-from src.models import Page, ParatranzString, RateLimitSettings, StageEnum
+from reaper_tools.localization.paratranz import Paratranz
+from reaper_tools.models import Page, ParatranzString, RateLimitSettings, StageEnum
 
 
 class ParatranzApiTests(unittest.TestCase):
@@ -517,3 +517,4 @@ class ParatranzApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
