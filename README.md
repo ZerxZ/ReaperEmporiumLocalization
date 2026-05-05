@@ -490,7 +490,9 @@ GitHub Actions 使用 `.github/workflows/runner.yml` 生成最终发布包。该
 最终发布的 zip 设计为直接解压到游戏根目录，根目录应包含：
 
 - `BepInEx/`
-- `localization/`
+- `localization/database/`
+- `localization/dll_strings/`
+- `localization/fonts/`
 - `.doorstop_version`
 - `doorstop_config.ini`
 - `winhttp.dll`

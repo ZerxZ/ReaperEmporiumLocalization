@@ -157,8 +157,12 @@ jobs:
             Remove-Item -Force
 
           $localizationDir = Join-Path $staging "localization"
-          if (Test-Path $localizationDir) {
-            Remove-Item -LiteralPath $localizationDir -Recurse -Force
+          New-Item -ItemType Directory -Force -Path $localizationDir | Out-Null
+          foreach ($generatedSubdir in @("database", "dll_strings")) {
+            $generatedPath = Join-Path $localizationDir $generatedSubdir
+            if (Test-Path $generatedPath) {
+              Remove-Item -LiteralPath $generatedPath -Recurse -Force
+            }
           }
 
           Expand-Archive -LiteralPath $localizationZip -DestinationPath $staging -Force
@@ -179,7 +183,7 @@ jobs:
           try {
             $names = $zip.Entries | ForEach-Object { $_.FullName.Replace("\", "/") }
 
-            foreach ($required in @("BepInEx/", "localization/")) {
+            foreach ($required in @("BepInEx/", "localization/", "localization/database/", "localization/dll_strings/", "localization/fonts/")) {
               if (-not ($names | Where-Object { $_.StartsWith($required) })) {
                 throw "Missing required directory in release package: $required"
               }
