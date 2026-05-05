@@ -65,6 +65,14 @@ BUILD_DUMP_COMMAND = CommandMetadata(
     short_help="构建 MainGame/DLCGame 差异转储。",
 )
 
+COMPARE_PARATRANZ_COMMAND = CommandMetadata(
+    key="compare_paratranz",
+    name="下载对比",
+    aliases=("compare-paratranz",),
+    help="下载最新 ParaTranz 导出包，并与本地 MainGame 或 DLCGame 标准包结构做双向对比。",
+    short_help="下载 ParaTranz 并对比本体或 DLC。",
+)
+
 MIGRATE_TRANSLATIONS_COMMAND = CommandMetadata(
     key="migrate_translations",
     name="迁移翻译",
@@ -105,6 +113,7 @@ COMMAND_METADATA = (
     PULL_COMMAND,
     STATS_COMMAND,
     BUILD_DUMP_COMMAND,
+    COMPARE_PARATRANZ_COMMAND,
     MIGRATE_TRANSLATIONS_COMMAND,
     MIGRATE_TERMS_COMMAND,
     UPLOAD_TRANSLATIONS_COMMAND,
@@ -121,6 +130,7 @@ __all__ = [
     "COMMAND_METADATA",
     "COMMAND_METADATA_BY_KEY",
     "COMMAND_METADATA_BY_NAME",
+    "COMPARE_PARATRANZ_COMMAND",
     "CommandMetadata",
     "DOWNLOAD_COMMAND",
     "INSTALL_COMMAND",

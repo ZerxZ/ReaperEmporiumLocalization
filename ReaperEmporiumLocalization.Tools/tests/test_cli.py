@@ -3,13 +3,16 @@ from __future__ import annotations
 import io
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from click.testing import CliRunner
 
 import main as root_main
 from reaper_tools.cli.commands import ALL_COMMANDS
 from reaper_tools.cli.main import cli, main as cli_main
-from reaper_tools.cli.registry import COMMAND_METADATA, DOWNLOAD_COMMAND
+from reaper_tools.cli.registry import COMMAND_METADATA, COMPARE_PARATRANZ_COMMAND, DOWNLOAD_COMMAND
 
 
 class CliRegressionTests(unittest.TestCase):
@@ -35,6 +38,43 @@ class CliRegressionTests(unittest.TestCase):
 
         self.assertEqual(canonical.exit_code, 0, canonical.output)
         self.assertEqual(alias.exit_code, 0, alias.output)
+
+    def test_compare_command_requires_scope(self) -> None:
+        runner = CliRunner()
+
+        result = runner.invoke(cli, [COMPARE_PARATRANZ_COMMAND.aliases[0]])
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("--scope", result.output)
+
+    def test_compare_command_forwards_custom_paths(self) -> None:
+        runner = CliRunner()
+        fake_result = SimpleNamespace(
+            scope_dir="MainGame",
+            summary=SimpleNamespace(
+                scanned_files=4,
+                remote_only_files=1,
+                remote_only_entries=3,
+                local_only_files=1,
+                local_only_entries=3,
+                source_changed_entries=2,
+                translation_changed_entries=2,
+                entry_changed_entries=2,
+            ),
+            report_path=Path("build/compare_paratranz/MainGame/report.json"),
+        )
+
+        with patch("reaper_tools.cli.commands.dump_workflow.download_and_compare_paratranz", return_value=fake_result) as mock_compare:
+            result = runner.invoke(
+                cli,
+                [COMPARE_PARATRANZ_COMMAND.aliases[0], "--scope", "main", "--local-root", "custom", "--output-root", "out"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        mock_compare.assert_called_once()
+        self.assertEqual(mock_compare.call_args.kwargs["scope"], "main")
+        self.assertEqual(mock_compare.call_args.kwargs["local_root"], Path("custom"))
+        self.assertEqual(mock_compare.call_args.kwargs["output_root"], Path("out"))
 
 
 if __name__ == "__main__":

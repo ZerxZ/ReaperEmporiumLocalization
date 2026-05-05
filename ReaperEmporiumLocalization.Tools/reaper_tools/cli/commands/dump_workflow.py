@@ -5,7 +5,13 @@ from pathlib import Path
 import click
 
 from reaper_tools.cli.common import HELP_OPTION_NAMES, LocalizedCommand, get_command_app_context, with_aliases
-from reaper_tools.cli.registry import BUILD_DUMP_COMMAND, MIGRATE_TRANSLATIONS_COMMAND, PACKAGE_FINAL_COMMAND
+from reaper_tools.cli.registry import (
+    BUILD_DUMP_COMMAND,
+    COMPARE_PARATRANZ_COMMAND,
+    MIGRATE_TRANSLATIONS_COMMAND,
+    PACKAGE_FINAL_COMMAND,
+)
+from reaper_tools.localization.compare_paratranz import download_and_compare_paratranz
 from reaper_tools.localization.dump_builder import build_dump_diff
 from reaper_tools.localization.installer import package_final_localization
 from reaper_tools.localization.paratranz import Paratranz
@@ -39,6 +45,62 @@ def build_dump_command(progress: bool) -> int:
         stats.dlc_dll_entries_read,
         stats.diff_database_files_written,
         stats.diff_dll_files_written,
+    )
+    return 0
+
+
+@with_aliases(*COMPARE_PARATRANZ_COMMAND.aliases)
+@click.command(
+    COMPARE_PARATRANZ_COMMAND.name,
+    cls=LocalizedCommand,
+    context_settings={"help_option_names": HELP_OPTION_NAMES},
+    help=COMPARE_PARATRANZ_COMMAND.help,
+    short_help=COMPARE_PARATRANZ_COMMAND.short_help,
+)
+@click.option(
+    "--scope",
+    type=click.Choice(("main", "dlc"), case_sensitive=False),
+    required=True,
+    help="选择要对比的作用域：main 对应 MainGame，dlc 对应 DLCGame。",
+)
+@click.option("--local-root", type=click.Path(path_type=Path), help="本地标准包结构根目录；未传时默认使用 build/dump。")
+@click.option(
+    "--output-root",
+    type=click.Path(path_type=Path),
+    help="对比报告输出目录；未传时默认使用 build/compare_paratranz。",
+)
+@click.option("--force", is_flag=True, help="忽略本地缓存，强制重新下载 ParaTranz 导出包。")
+@click.option("--progress", is_flag=True, help="显示下载与对比进度条。")
+def compare_paratranz_command(
+    scope: str,
+    local_root: Path | None,
+    output_root: Path | None,
+    force: bool,
+    progress: bool,
+) -> int:
+    """下载最新 ParaTranz 导出包，并与本地标准包结构做双向对比。"""
+    context = get_command_app_context()
+    result = download_and_compare_paratranz(
+        scope=scope,
+        local_root=local_root,
+        output_root=output_root,
+        force=force,
+        show_progress=progress,
+        context=context,
+    )
+    context.logger.success(
+        "已完成 ParaTranz 对比：{}，扫描 {} 个文件，远端独有文件 {} 个 / 词条 {} 条，本地独有文件 {} 个 / 词条 {} 条，"
+        "原文变化 {} 条，译文变化 {} 条，整体变化 {} 条。报告：{}",
+        result.scope_dir,
+        result.summary.scanned_files,
+        result.summary.remote_only_files,
+        result.summary.remote_only_entries,
+        result.summary.local_only_files,
+        result.summary.local_only_entries,
+        result.summary.source_changed_entries,
+        result.summary.translation_changed_entries,
+        result.summary.entry_changed_entries,
+        result.report_path,
     )
     return 0
 
