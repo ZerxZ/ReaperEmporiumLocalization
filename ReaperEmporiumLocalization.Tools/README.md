@@ -14,6 +14,8 @@ reaper-tools 安装包 data
 reaper-tools 下载包 --progress
 reaper-tools 拉取安装 --progress
 reaper-tools 构建差异
+reaper-tools 下载对比 --scope dlc --local-root data\0-DumpData --progress
+reaper-tools 上传对比变化 --scope dlc --execute --progress
 reaper-tools 迁移翻译 --progress
 reaper-tools 迁移术语 --source-project-id 旧项目ID --progress
 reaper-tools 上传翻译 --project-id 新项目ID --progress
@@ -27,6 +29,8 @@ reaper-tools 最终打包 --progress
 | `拉取安装` | `pull` | 先下载 ParaTranz 导出包，再安装到游戏目录。 |
 | `查看统计` | `stats` | 统计本地翻译包中的数据库和 DLL 词条数量。 |
 | `构建差异` | `build-dump` | 根据 MainGame/DLCGame 转储数据构建差异输出。 |
+| `下载对比` | `compare-paratranz` | 下载 ParaTranz 最新导出包，并和本地 MainGame/DLCGame 标准包结构做双向对比。 |
+| `上传对比变化` | `upload-compare-changes` | 将 `下载对比` 产出的 `delta/` 逐条通过 ParaTranz string API 写回，默认只预览。 |
 | `迁移翻译` | `migrate-translations` | 把旧 ParaTranz 译文迁移到新 `build/dump` 结构。 |
 | `迁移术语` | `migrate-terms` | 把旧 ParaTranz 项目的术语迁移到新 ParaTranz 项目。 |
 | `上传翻译` | `upload-translations` | 把人工检查后的 `build/migrated` 上传到目标 ParaTranz 项目，并把冲突候选逐次写入文件修订历史后再恢复最终译文。 |
@@ -38,6 +42,9 @@ reaper-tools 最终打包 --progress
 - `--force`：忽略本地缓存，强制重新下载 ParaTranz 导出包。
 - `--game-root`：指定游戏根目录。
 - `--no-clear`：安装前不清理已有汉化 JSON。
+- `--scope main|dlc`：选择 `MainGame` 或 `DLCGame`。
+- `--local-root`：指定本地标准包结构根目录。
+- `--compare-root`：指定 `下载对比` 结果根目录。
 - `--dry-run`：只预览迁移统计，不写入迁移结果。
 - `--execute`：对远端 ParaTranz 命令真正执行写入；未传时只预览计划。
 
@@ -127,6 +134,130 @@ build/dump/
 ```powershell
 reaper-tools 构建差异 --progress
 ```
+
+## 下载 ParaTranz 并对比本地转储
+
+`下载对比` 用于把 ParaTranz 远端当前状态和本地标准包结构对出来，不会写入远端。典型用途是：游戏本体或 DLC 更新后，先从 `data/0-DumpData` 读取新提取文本，再看远端项目需要修正哪些原文、增加哪些词条、保留哪些残留。
+
+```powershell
+reaper-tools 下载对比 --scope dlc --local-root data\0-DumpData --progress
+```
+
+英文别名等价：
+
+```powershell
+reaper-tools compare-paratranz --scope dlc --local-root data\0-DumpData --progress
+```
+
+参数说明：
+
+- `--scope main|dlc`
+  - 必填。
+  - `main` 对比 `MainGame`。
+  - `dlc` 对比 `DLCGame`。
+- `--local-root`
+  - 可选，默认 `build/dump`。
+  - 必须是标准包结构根目录，包含 `MainGame/` 或 `DLCGame/`。
+- `--output-root`
+  - 可选，默认 `build/compare_paratranz`。
+- `--force`
+  - 强制重新下载 ParaTranz 导出包，不复用缓存。
+
+`--scope dlc` 会把远端和本地的 `MainGame` + `DLCGame` 合并后再比较，得到完整 DLC 视角。DLC 同原文词条优先使用 DLC 侧内容；没有 DLC 覆盖时保留 MainGame 侧内容。
+
+输出目录：
+
+```text
+build/compare_paratranz/
+  MainGame/ 或 DLCGame/
+    report.json
+    diff/
+      database/**/*.json.diff
+      dll_strings.json.diff
+    delta/
+      source_updates/
+      new_entries/
+      translation_updates/
+      entry_updates/
+    review/
+      remote_only/
+```
+
+输出含义：
+
+- `delta/source_updates`
+  - 已匹配词条的原文或 context 变化。
+  - 会保留 ParaTranz 远端原有 `key` 和 `translation`，但 `stage` 会改为 `0`，方便重新翻译或审核。
+- `delta/entry_updates`
+  - 已匹配词条的原文和译文侧都变化。
+  - 同样保留远端原有 `translation`，并把 `stage` 改为 `0`。
+- `delta/new_entries`
+  - 本地有、ParaTranz 没有的新词条。
+  - 数据库新增词条的 `key` 会先按同路径远端 DLC 文件顺序中最后一个数字 `key` 后继续编号；如果远端没有 DLC 文件或 DLC 词条，则按远端 MainGame 同路径文件继续；仍然没有可用种子时从 `0` 开始。
+  - 这样可以避免新增词条覆盖远端 DLC 已存在的 key。
+- `delta/translation_updates`
+  - 仅译文变化。
+  - 只在本地输入本身是翻译包时有意义；如果 `--local-root` 指向 `data/0-DumpData` 这类纯源文本转储，译文变化会被忽略。
+- `review/remote_only`
+  - ParaTranz 有、本地没有的残留候选。
+  - 只供人工确认，不自动删除。
+- `diff`
+  - 只为已匹配的 `source_updates` / `entry_updates` 生成可读 diff。
+  - `new_entries` 和 `remote_only` 不生成 diff，避免新增或残留淹没真正的原文修正。
+
+数据库词条匹配以 `original` 为主，等长数组时允许索引辅助，小文件会用 fuzz 匹配原文轻微修正；但真正输出 `source_updates` / `entry_updates` 前还会再次经过 fuzz 确认，避免把不相关词条错配成原文替换。DLL 词条仍按 `key + original` 精确规则为主。
+
+## 上传对比变化
+
+`上传对比变化` 用于把 `下载对比` 生成的 `delta/` 结果逐条写回 ParaTranz。它读取的是实际 delta JSON 文件，而不是整文件覆盖：
+
+```text
+build/compare_paratranz/<Scope>/delta/source_updates/
+build/compare_paratranz/<Scope>/delta/entry_updates/
+build/compare_paratranz/<Scope>/delta/translation_updates/
+build/compare_paratranz/<Scope>/delta/new_entries/
+```
+
+不会上传：
+
+- `review/remote_only`
+
+默认只预览计划，不写入远端：
+
+```powershell
+reaper-tools 上传对比变化 --scope dlc
+```
+
+确认计划无误后，再显式执行：
+
+```powershell
+reaper-tools 上传对比变化 --scope dlc --execute --progress
+```
+
+英文别名等价：
+
+```powershell
+reaper-tools upload-compare-changes --scope dlc --execute --progress
+```
+
+上传行为：
+
+- 直接扫描 `delta/source_updates`、`delta/entry_updates`、`delta/translation_updates`、`delta/new_entries` 下的 JSON。
+- 按远端文件名和词条 `key` 定位 ParaTranz string。
+- `source_updates` / `entry_updates` / `translation_updates` 对已有 string 逐条调用更新接口。
+- `new_entries` 对目标远端文件逐条调用创建 string 接口；如果远端同 key 已存在，会跳过以避免覆盖。
+- 写回时更新 `original` / `context`。
+- 保留现有 `translation`。
+- `source_updates` / `entry_updates` / `new_entries` 会将 `stage` 写为 `0`，让 ParaTranz 中这些条目回到未翻译状态，方便重新翻译。
+- `translation_updates` 保留 delta 文件里的 `stage`。
+- `--scope dlc` 时会先尝试 DLCGame 远端文件；如果词条实际来自合并基线里的 MainGame，会继续定位 MainGame 对应文件。
+
+安全边界：
+
+- 必须先运行 `下载对比`，并保留当前输出结构里的 `delta/` 目录。
+- 默认 dry-run。
+- 远端写入必须显式加 `--execute`。
+- 找不到远端文件时只跳过并计入提示，不会创建远端文件，也不会删除远端残留。
 
 ## 迁移旧 ParaTranz 译文
 

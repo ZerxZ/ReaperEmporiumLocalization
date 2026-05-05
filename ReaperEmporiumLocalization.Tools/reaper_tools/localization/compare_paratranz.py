@@ -4,21 +4,26 @@ import json
 import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
+
+from thefuzz import fuzz
 
 from reaper_tools.app_context import AppContext, build_app_context, get_app_context
-from reaper_tools.models import ParatranzData
+from reaper_tools.models import ParatranzData, StageEnum, StringWriteRequest
 from reaper_tools.services.base import _ASSET_TEXT_DIR_PATTERN
 
 from .diff_helpers import (
     DATABASE_DIR,
+    DATABASE_ORIGINAL_FUZZY_THRESHOLD,
     DLL_STRINGS_FILE,
     DLC_GAME_DIR,
     MAIN_GAME_DIR,
     DatabaseEntryMatcher,
     DatabaseMatchPair,
     build_database_match_pairs,
-    is_numeric_database_key,
+    database_original_for_match,
     json_files,
+    next_database_key_counter,
     write_paratranz_file,
     write_readable_json_diff,
 )
@@ -27,6 +32,18 @@ from .paratranz import Paratranz
 
 DIFF_DIR = "diff"
 DELTA_DIR = "delta"
+REVIEW_DIR = "review"
+SOURCE_UPDATES_DIR = "source_updates"
+NEW_ENTRIES_DIR = "new_entries"
+TRANSLATION_UPDATES_DIR = "translation_updates"
+ENTRY_UPDATES_DIR = "entry_updates"
+REMOTE_ONLY_DIR = "remote_only"
+_UPLOAD_DELTA_CATEGORIES = (
+    SOURCE_UPDATES_DIR,
+    ENTRY_UPDATES_DIR,
+    TRANSLATION_UPDATES_DIR,
+    NEW_ENTRIES_DIR,
+)
 _DEFAULT_CONTEXT = get_app_context()
 paths = _DEFAULT_CONTEXT.paths
 logger = _DEFAULT_CONTEXT.logger
@@ -57,27 +74,18 @@ class CompareParatranzFileReport:
     source_changed: int = 0
     translation_changed: int = 0
     entry_changed: int = 0
-    delta_path: str | None = None
+    delta_paths: dict[str, str] = field(default_factory=dict)
+    review_paths: dict[str, str] = field(default_factory=dict)
     diff_path: str | None = None
 
     @property
     def has_delta(self) -> bool:
-        return any(
-            (
-                self.local_only,
-                self.source_changed,
-                self.translation_changed,
-                self.entry_changed,
-            )
-        )
+        return bool(self.delta_paths)
 
     @property
     def has_source_diff(self) -> bool:
         return any(
             (
-                self.only_in is not None,
-                self.remote_only,
-                self.local_only,
                 self.source_changed,
                 self.entry_changed,
             )
@@ -98,6 +106,7 @@ class CompareParatranzResult:
 
     def to_report_payload(self) -> dict:
         return {
+            "report_version": 2,
             "scope": self.scope,
             "local_mode": self.local_mode,
             "remote_root": self.remote_root.as_posix(),
@@ -109,12 +118,52 @@ class CompareParatranzResult:
 
 
 @dataclass(slots=True)
+class UploadCompareChangeAction:
+    category: str
+    relative_path: str
+    entry_key: str
+    operation: str = "save_string"
+    remote_name: str | None = None
+    file_id: int | None = None
+    string_id: int | None = None
+    will_write: bool = True
+    reason: str | None = None
+
+
+@dataclass(slots=True)
+class UploadCompareChangesSummary:
+    scanned_files: int = 0
+    source_changed_entries: int = 0
+    entry_changed_entries: int = 0
+    translation_changed_entries: int = 0
+    new_entries: int = 0
+    planned_entries: int = 0
+    succeeded_entries: int = 0
+    failed_entries: int = 0
+    skipped_entries: int = 0
+
+
+@dataclass(slots=True)
+class UploadCompareChangesResult:
+    scope: str
+    scope_dir: str
+    compare_root: Path
+    report_path: Path
+    project_id: int
+    dry_run: bool = True
+    summary: UploadCompareChangesSummary = field(default_factory=UploadCompareChangesSummary)
+    actions: list[UploadCompareChangeAction] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class _ScopePackage:
     root: Path
     database_entries_by_relative: dict[Path, list[ParatranzData]]
     dll_entries: list[ParatranzData]
     label: str
     scope_dir: str
+    database_key_seed_entries_by_relative: dict[Path, list[ParatranzData]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -160,10 +209,8 @@ def compare_downloaded_paratranz_scope(
     remote_base = Path(remote_root).resolve()
     local_base = (Path(local_root) if local_root is not None else ctx.paths.root / "build" / "dump").resolve()
     output_base = (Path(output_root) if output_root is not None else ctx.paths.root / "build" / "compare_paratranz").resolve()
-    local_scope_root = local_base / scope_dir
     scope_output_root = output_base / scope_dir
 
-    _require_scope_package(local_scope_root, f"本地 {scope_dir}")
     _reset_scope_output(scope_output_root, output_base, context=ctx)
     local_scope_package = _build_local_scope_package(local_base, scope_dir)
     remote_scope_package = _build_remote_scope_package(remote_base, scope_dir)
@@ -179,7 +226,6 @@ def compare_downloaded_paratranz_scope(
         local_mode=comparison_options.local_mode,
     )
 
-    local_database_root = local_scope_root / DATABASE_DIR
     remote_database_files = set(remote_scope_package.database_entries_by_relative)
     local_database_files = set(local_scope_package.database_entries_by_relative)
 
@@ -194,7 +240,13 @@ def compare_downloaded_paratranz_scope(
                 local_label=local_scope_package.label,
                 scope_dir=scope_dir,
                 delta_root=scope_output_root / DELTA_DIR,
+                review_root=scope_output_root / REVIEW_DIR,
                 diff_root=scope_output_root / DIFF_DIR,
+                key_seed_entries=_database_key_seed_entries(
+                    remote_scope_package,
+                    relative,
+                    scope_dir=scope_dir,
+                ),
                 options=comparison_options,
             )
             _record_file_report(result, report)
@@ -208,6 +260,7 @@ def compare_downloaded_paratranz_scope(
             local_label=local_scope_package.label,
             scope_dir=scope_dir,
             delta_root=scope_output_root / DELTA_DIR,
+            review_root=scope_output_root / REVIEW_DIR,
             diff_root=scope_output_root / DIFF_DIR,
             options=comparison_options,
         )
@@ -224,6 +277,298 @@ def compare_downloaded_paratranz_scope(
     return result
 
 
+def upload_compare_source_changes(
+    *,
+    scope: str,
+    compare_root: Path | str | None = None,
+    project_id: int | None = None,
+    dry_run: bool = True,
+    show_progress: bool = False,
+    context: AppContext | None = None,
+    api: Any | None = None,
+) -> UploadCompareChangesResult:
+    ctx = context or build_app_context(project_paths=paths, app_logger=logger)
+    scope_dir = _resolve_scope_dir(scope)
+    compare_base = (Path(compare_root) if compare_root is not None else ctx.paths.root / "build" / "compare_paratranz").resolve()
+    scope_output_root = compare_base / scope_dir
+    report_path = scope_output_root / "report.json"
+    delta_root = scope_output_root / DELTA_DIR
+    if not delta_root.is_dir():
+        raise FileNotFoundError(f"ParaTranz 对比 delta 目录不存在：{delta_root}")
+
+    paratranz = api or Paratranz(context=ctx)
+    resolved_project_id = project_id if project_id is not None else int(paratranz.project_id)
+    result = UploadCompareChangesResult(
+        scope=scope,
+        scope_dir=scope_dir,
+        compare_root=scope_output_root,
+        report_path=report_path,
+        project_id=resolved_project_id,
+        dry_run=dry_run,
+    )
+
+    remote_files = list(paratranz.get_files(project_id=resolved_project_id))
+    remote_file_index = _remote_files_by_name(remote_files)
+    string_cache: dict[int, list[Any]] = {}
+    work_items: list[tuple[UploadCompareChangeAction, ParatranzData]] = []
+
+    for category, delta_file in _iter_upload_delta_files(delta_root):
+        relative = delta_file.relative_to(delta_root / category)
+        entries = read_paratranz_file(delta_file)
+        result.summary.scanned_files += 1
+        _record_upload_category_count(result.summary, category, len(entries))
+        for entry in entries:
+            action = _build_upload_compare_change_action(
+                paratranz,
+                remote_files=remote_files,
+                remote_file_index=remote_file_index,
+                string_cache=string_cache,
+                scope_dir=scope_dir,
+                relative=relative,
+                category=category,
+                entry=entry,
+                project_id=resolved_project_id,
+            )
+            result.actions.append(action)
+            if action.will_write:
+                result.summary.planned_entries += 1
+                work_items.append((action, entry))
+            else:
+                result.summary.skipped_entries += 1
+
+    if dry_run:
+        return result
+
+    with ctx.progress(total=len(work_items), enabled=show_progress, desc="上传对比 delta", unit="条") as progress:
+        for action, entry in work_items:
+            try:
+                request = _string_write_request_for_upload(action, entry)
+                if action.operation == "create_string":
+                    paratranz.create_string(request, project_id=resolved_project_id)
+                else:
+                    paratranz.save_string(action.string_id or 0, request, project_id=resolved_project_id)
+                result.summary.succeeded_entries += 1
+            except Exception as exc:  # noqa: BLE001
+                result.summary.failed_entries += 1
+                result.errors.append(f"{action.remote_name or action.relative_path}#{action.entry_key}: {exc}")
+            progress.set_postfix_str(f"{action.remote_name or action.relative_path}#{action.entry_key}")
+            progress.update()
+
+    return result
+
+
+def _iter_upload_delta_files(delta_root: Path) -> list[tuple[str, Path]]:
+    files: list[tuple[str, Path]] = []
+    for category in _UPLOAD_DELTA_CATEGORIES:
+        category_root = delta_root / category
+        if not category_root.is_dir():
+            continue
+        for delta_file in json_files(category_root):
+            files.append((category, delta_file))
+    category_order = {category: index for index, category in enumerate(_UPLOAD_DELTA_CATEGORIES)}
+    return sorted(files, key=lambda item: (category_order[item[0]], item[1].as_posix().casefold()))
+
+
+def _record_upload_category_count(summary: UploadCompareChangesSummary, category: str, count: int) -> None:
+    if category == SOURCE_UPDATES_DIR:
+        summary.source_changed_entries += count
+    elif category == ENTRY_UPDATES_DIR:
+        summary.entry_changed_entries += count
+    elif category == TRANSLATION_UPDATES_DIR:
+        summary.translation_changed_entries += count
+    elif category == NEW_ENTRIES_DIR:
+        summary.new_entries += count
+
+
+def _string_write_request_for_upload(action: UploadCompareChangeAction, entry: ParatranzData) -> StringWriteRequest:
+    stage: int | StageEnum | None = entry.stage
+    if action.category in {SOURCE_UPDATES_DIR, ENTRY_UPDATES_DIR, NEW_ENTRIES_DIR}:
+        stage = int(StageEnum.untranslated)
+    return StringWriteRequest(
+        key=entry.key,
+        original=entry.original,
+        translation=entry.translation,
+        file=action.file_id if action.operation == "create_string" else None,
+        stage=stage,
+        context=entry.context,
+    )
+
+
+def _build_upload_compare_change_action(
+    api: Any,
+    *,
+    remote_files: list[Any],
+    remote_file_index: dict[str, Any],
+    string_cache: dict[int, list[Any]],
+    scope_dir: str,
+    relative: Path,
+    category: str,
+    entry: ParatranzData,
+    project_id: int,
+) -> UploadCompareChangeAction:
+    operation = "create_string" if category == NEW_ENTRIES_DIR else "save_string"
+    action = UploadCompareChangeAction(
+        category=category,
+        relative_path=relative.as_posix(),
+        entry_key=entry.key,
+        operation=operation,
+    )
+    remote_file, remote_string = _find_upload_compare_target(
+        api,
+        remote_files=remote_files,
+        remote_file_index=remote_file_index,
+        string_cache=string_cache,
+        scope_dir=scope_dir,
+        relative=relative,
+        entry=entry,
+        project_id=project_id,
+    )
+    if remote_file is None:
+        action.will_write = False
+        action.reason = "远端文件不存在"
+        return action
+
+    action.remote_name = _remote_file_name(remote_file)
+    action.file_id = _remote_file_id(remote_file)
+    if action.file_id is None:
+        action.will_write = False
+        action.reason = "远端文件缺少 file id"
+        return action
+
+    if category == NEW_ENTRIES_DIR:
+        if remote_string is not None:
+            action.will_write = False
+            action.reason = "远端词条 key 已存在，跳过以避免覆盖"
+            action.string_id = _remote_string_id(remote_string)
+        return action
+
+    if remote_string is None:
+        action.will_write = False
+        action.reason = "远端词条不存在"
+        return action
+
+    action.string_id = _remote_string_id(remote_string)
+    if action.string_id is None:
+        action.will_write = False
+        action.reason = "远端词条缺少 string id"
+    return action
+
+
+def _find_upload_compare_target(
+    api: Any,
+    *,
+    remote_files: list[Any],
+    remote_file_index: dict[str, Any],
+    string_cache: dict[int, list[Any]],
+    scope_dir: str,
+    relative: Path,
+    entry: ParatranzData,
+    project_id: int,
+) -> tuple[Any | None, Any | None]:
+    for remote_file in _remote_file_candidates(remote_files, remote_file_index, scope_dir, relative):
+        file_id = _remote_file_id(remote_file)
+        if file_id is None:
+            continue
+        strings = _cached_file_strings(api, file_id, string_cache, project_id=project_id)
+        remote_string = _select_remote_string(strings, entry)
+        if remote_string is not None:
+            return remote_file, remote_string
+    candidates = _remote_file_candidates(remote_files, remote_file_index, scope_dir, relative)
+    return (candidates[0], None) if candidates else (None, None)
+
+
+def _remote_files_by_name(remote_files: list[Any]) -> dict[str, Any]:
+    return {
+        _normalize_remote_file_name(_remote_file_name(remote_file)): remote_file
+        for remote_file in remote_files
+        if _remote_file_name(remote_file)
+    }
+
+
+def _remote_file_candidates(
+    remote_files: list[Any],
+    remote_file_index: dict[str, Any],
+    scope_dir: str,
+    relative: Path,
+) -> list[Any]:
+    relative_name = _normalize_remote_file_name(relative.as_posix())
+    names = [f"{scope_dir}/{relative_name}"]
+    if scope_dir == DLC_GAME_DIR:
+        names.append(f"{MAIN_GAME_DIR}/{relative_name}")
+    names.append(relative_name)
+
+    candidates: list[Any] = []
+    seen_ids: set[int] = set()
+    for name in names:
+        remote_file = remote_file_index.get(_normalize_remote_file_name(name))
+        if remote_file is not None:
+            _append_unique_remote_file(candidates, seen_ids, remote_file)
+
+    for remote_file in remote_files:
+        remote_name = _normalize_remote_file_name(_remote_file_name(remote_file))
+        if remote_name == relative_name or remote_name.endswith(f"/{relative_name}"):
+            _append_unique_remote_file(candidates, seen_ids, remote_file)
+    return candidates
+
+
+def _append_unique_remote_file(candidates: list[Any], seen_ids: set[int], remote_file: Any) -> None:
+    identity = id(remote_file)
+    if identity in seen_ids:
+        return
+    seen_ids.add(identity)
+    candidates.append(remote_file)
+
+
+def _cached_file_strings(api: Any, file_id: int, cache: dict[int, list[Any]], *, project_id: int) -> list[Any]:
+    if file_id in cache:
+        return cache[file_id]
+    page_number = 1
+    strings: list[Any] = []
+    while True:
+        page = api.get_strings(
+            file=file_id,
+            detailed=True,
+            page=page_number,
+            page_size=500,
+            project_id=project_id,
+        )
+        results = list(getattr(page, "results", []) or [])
+        strings.extend(results)
+        page_count = getattr(page, "page_count", None)
+        if not results or (page_count is not None and page_number >= page_count):
+            break
+        page_number += 1
+    cache[file_id] = strings
+    return strings
+
+
+def _select_remote_string(strings: list[Any], entry: ParatranzData) -> Any | None:
+    matches = [remote_string for remote_string in strings if str(getattr(remote_string, "key", "")) == entry.key]
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    return max(matches, key=lambda remote_string: fuzz.ratio(str(getattr(remote_string, "original", "")), entry.original))
+
+
+def _normalize_remote_file_name(name: str) -> str:
+    return name.replace("\\", "/").strip("/")
+
+
+def _remote_file_name(remote_file: Any) -> str:
+    return str(getattr(remote_file, "name", "") or "")
+
+
+def _remote_file_id(remote_file: Any) -> int | None:
+    value = getattr(remote_file, "id", None)
+    return int(value) if value is not None else None
+
+
+def _remote_string_id(remote_string: Any) -> int | None:
+    value = getattr(remote_string, "id", None)
+    return int(value) if value is not None else None
+
+
 def _compare_database_file(
     remote_entries: list[ParatranzData] | None,
     local_entries: list[ParatranzData] | None,
@@ -233,7 +578,9 @@ def _compare_database_file(
     local_label: str,
     scope_dir: str,
     delta_root: Path,
+    review_root: Path,
     diff_root: Path,
+    key_seed_entries: list[ParatranzData],
     options: _ComparisonOptions,
 ) -> CompareParatranzFileReport:
     remote_entries = list(remote_entries or [])
@@ -246,27 +593,27 @@ def _compare_database_file(
         local_entries=len(local_entries),
     )
 
+    source_update_entries: list[ParatranzData] = []
+    translation_update_entries: list[ParatranzData] = []
+    entry_update_entries: list[ParatranzData] = []
+    new_entries: list[ParatranzData] = []
+    rejected_remote_entries: list[ParatranzData] = []
+    remote_source_diff_entries: list[ParatranzData] = []
+    local_source_diff_entries: list[ParatranzData] = []
+    next_new_key = next_database_key_counter(key_seed_entries)
+
     if not remote_entries or not local_entries:
         report.remote_only = len(remote_entries)
         report.local_only = len(local_entries)
-        delta_entries = _build_database_delta_entries(remote_entries, local_entries)
-        report.delta_path = _write_delta_file(delta_entries, _delta_file_path(delta_root, relative))
-        if report.has_source_diff:
-            report.diff_path = _write_diff_file(
-                remote_entries,
-                delta_entries,
-                diff_root / relative.with_name(f"{relative.name}.diff"),
-                from_label=f"{remote_label}/{scope_dir}/{relative.as_posix()}",
-                to_label=f"{local_label}/{scope_dir}/{relative.as_posix()}",
-            )
+        for local_entry in local_entries:
+            output_entry, next_new_key = _database_output_entry(None, local_entry, next_new_key, None, options)
+            new_entries.append(output_entry)
+        _write_report_entries(report.delta_paths, NEW_ENTRIES_DIR, new_entries, delta_root / NEW_ENTRIES_DIR / relative)
+        _write_report_entries(report.review_paths, REMOTE_ONLY_DIR, remote_entries, review_root / REMOTE_ONLY_DIR / relative)
         return report
 
     pairs, unmatched_remote_entries = build_database_match_pairs(remote_entries, local_entries)
     unmatched_local_entries: list[ParatranzData] = []
-    delta_entries: list[ParatranzData] = []
-    remote_source_diff_entries: list[ParatranzData] = []
-    local_source_diff_entries: list[ParatranzData] = []
-    next_new_key = _next_database_key_counter(remote_entries)
     for pair in pairs:
         if pair.base_entry is None:
             unmatched_local_entries.append(pair.compare_entry)
@@ -280,9 +627,28 @@ def _compare_database_file(
             report.entry_changed += 1
         else:
             continue
-        output_entry, next_new_key = _database_output_entry(pair.base_entry, pair.compare_entry, next_new_key)
-        delta_entries.append(output_entry)
-        if classification != "translation_changed":
+        if not _is_fuzzy_confirmed_source_pair(pair.base_entry, pair.compare_entry, classification):
+            unmatched_remote_entries.append(pair.base_entry)
+            unmatched_local_entries.append(pair.compare_entry)
+            if classification == "source_changed":
+                report.source_changed -= 1
+            elif classification == "entry_changed":
+                report.entry_changed -= 1
+            continue
+        output_entry, next_new_key = _database_output_entry(
+            pair.base_entry,
+            pair.compare_entry,
+            next_new_key,
+            classification,
+            options,
+        )
+        if classification == "source_changed":
+            source_update_entries.append(output_entry)
+        elif classification == "translation_changed":
+            translation_update_entries.append(output_entry)
+        elif classification == "entry_changed":
+            entry_update_entries.append(output_entry)
+        if classification in {"source_changed", "entry_changed"}:
             remote_source_diff_entries.append(pair.base_entry)
             local_source_diff_entries.append(output_entry)
 
@@ -290,6 +656,8 @@ def _compare_database_file(
         unmatched_remote_entries,
         unmatched_local_entries,
     )
+    rejected_remote_entries: list[ParatranzData] = []
+    rejected_local_entries: list[ParatranzData] = []
     for pair in reconciled_pairs:
         classification = _classify_entry_change(pair.base_entry, pair.compare_entry, options=options)
         if classification == "source_changed":
@@ -300,21 +668,44 @@ def _compare_database_file(
             report.entry_changed += 1
         else:
             continue
-        output_entry, next_new_key = _database_output_entry(pair.base_entry, pair.compare_entry, next_new_key)
-        delta_entries.append(output_entry)
-        if classification != "translation_changed":
+        if not _is_fuzzy_confirmed_source_pair(pair.base_entry, pair.compare_entry, classification):
+            rejected_remote_entries.append(pair.base_entry)
+            rejected_local_entries.append(pair.compare_entry)
+            if classification == "source_changed":
+                report.source_changed -= 1
+            elif classification == "entry_changed":
+                report.entry_changed -= 1
+            continue
+        output_entry, next_new_key = _database_output_entry(
+            pair.base_entry,
+            pair.compare_entry,
+            next_new_key,
+            classification,
+            options,
+        )
+        if classification == "source_changed":
+            source_update_entries.append(output_entry)
+        elif classification == "translation_changed":
+            translation_update_entries.append(output_entry)
+        elif classification == "entry_changed":
+            entry_update_entries.append(output_entry)
+        if classification in {"source_changed", "entry_changed"}:
             remote_source_diff_entries.append(pair.base_entry)
             local_source_diff_entries.append(output_entry)
 
+    unmatched_remote_entries.extend(rejected_remote_entries)
+    unmatched_local_entries.extend(rejected_local_entries)
     report.remote_only = len(unmatched_remote_entries)
     report.local_only = len(unmatched_local_entries)
     for local_entry in unmatched_local_entries:
-        output_entry, next_new_key = _database_output_entry(None, local_entry, next_new_key)
-        delta_entries.append(output_entry)
-        local_source_diff_entries.append(output_entry)
-    remote_source_diff_entries.extend(unmatched_remote_entries)
+        output_entry, next_new_key = _database_output_entry(None, local_entry, next_new_key, None, options)
+        new_entries.append(output_entry)
 
-    report.delta_path = _write_delta_file(delta_entries, _delta_file_path(delta_root, relative))
+    _write_report_entries(report.delta_paths, SOURCE_UPDATES_DIR, source_update_entries, delta_root / SOURCE_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, TRANSLATION_UPDATES_DIR, translation_update_entries, delta_root / TRANSLATION_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, ENTRY_UPDATES_DIR, entry_update_entries, delta_root / ENTRY_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, NEW_ENTRIES_DIR, new_entries, delta_root / NEW_ENTRIES_DIR / relative)
+    _write_report_entries(report.review_paths, REMOTE_ONLY_DIR, unmatched_remote_entries, review_root / REMOTE_ONLY_DIR / relative)
     if report.has_source_diff:
         report.diff_path = _write_diff_file(
             remote_source_diff_entries,
@@ -335,6 +726,7 @@ def _compare_dll_file(
     local_label: str,
     scope_dir: str,
     delta_root: Path,
+    review_root: Path,
     diff_root: Path,
     options: _ComparisonOptions,
 ) -> CompareParatranzFileReport:
@@ -348,7 +740,11 @@ def _compare_dll_file(
     remote_exact: dict[tuple[str, str], list[ParatranzData]] = {}
     remote_by_key: dict[str, list[ParatranzData]] = {}
     used_remote_ids: set[int] = set()
-    delta_entries: list[ParatranzData] = []
+    source_update_entries: list[ParatranzData] = []
+    translation_update_entries: list[ParatranzData] = []
+    entry_update_entries: list[ParatranzData] = []
+    new_entries: list[ParatranzData] = []
+    rejected_remote_entries: list[ParatranzData] = []
     remote_source_diff_entries: list[ParatranzData] = []
     local_source_diff_entries: list[ParatranzData] = []
     for entry in remote_entries:
@@ -361,7 +757,7 @@ def _compare_dll_file(
             classification = _classify_translation_side_change(exact_candidate, local_entry, options=options)
             if classification == "translation_changed":
                 report.translation_changed += 1
-                delta_entries.append(local_entry)
+                translation_update_entries.append(local_entry)
             continue
 
         key_candidate = _take_first_unused(remote_by_key.get(local_entry.key, []), used_remote_ids)
@@ -369,22 +765,45 @@ def _compare_dll_file(
             classification = _classify_entry_change(key_candidate, local_entry, options=options)
             if classification == "entry_changed":
                 report.entry_changed += 1
-            else:
+                if not _is_fuzzy_confirmed_source_pair(key_candidate, local_entry, classification):
+                    report.entry_changed -= 1
+                    rejected_remote_entries.append(key_candidate)
+                    new_entries.append(local_entry)
+                    continue
+                output_entry = _dll_output_entry(key_candidate, local_entry, classification, options)
+                entry_update_entries.append(output_entry)
+            elif classification == "source_changed":
                 report.source_changed += 1
-            delta_entries.append(local_entry)
-            remote_source_diff_entries.append(key_candidate)
-            local_source_diff_entries.append(local_entry)
+                if not _is_fuzzy_confirmed_source_pair(key_candidate, local_entry, classification):
+                    report.source_changed -= 1
+                    rejected_remote_entries.append(key_candidate)
+                    new_entries.append(local_entry)
+                    continue
+                output_entry = _dll_output_entry(key_candidate, local_entry, classification, options)
+                source_update_entries.append(output_entry)
+            elif classification == "translation_changed":
+                report.translation_changed += 1
+                output_entry = _dll_output_entry(key_candidate, local_entry, classification, options)
+                translation_update_entries.append(output_entry)
+            else:
+                continue
+            if classification in {"source_changed", "entry_changed"}:
+                remote_source_diff_entries.append(key_candidate)
+                local_source_diff_entries.append(output_entry)
             continue
 
         report.local_only += 1
-        delta_entries.append(local_entry)
-        local_source_diff_entries.append(local_entry)
+        new_entries.append(local_entry)
 
     unmatched_remote_entries = [entry for entry in remote_entries if id(entry) not in used_remote_ids]
+    unmatched_remote_entries.extend(rejected_remote_entries)
     report.remote_only = len(unmatched_remote_entries)
-    remote_source_diff_entries.extend(unmatched_remote_entries)
 
-    report.delta_path = _write_delta_file(delta_entries, _delta_file_path(delta_root, relative))
+    _write_report_entries(report.delta_paths, SOURCE_UPDATES_DIR, source_update_entries, delta_root / SOURCE_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, TRANSLATION_UPDATES_DIR, translation_update_entries, delta_root / TRANSLATION_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, ENTRY_UPDATES_DIR, entry_update_entries, delta_root / ENTRY_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, NEW_ENTRIES_DIR, new_entries, delta_root / NEW_ENTRIES_DIR / relative)
+    _write_report_entries(report.review_paths, REMOTE_ONLY_DIR, unmatched_remote_entries, review_root / REMOTE_ONLY_DIR / relative)
     if report.has_source_diff:
         report.diff_path = _write_diff_file(
             remote_source_diff_entries,
@@ -448,6 +867,22 @@ def _translation_signature(entry: ParatranzData) -> tuple[str, int]:
     return entry.translation, int(entry.stage)
 
 
+def _is_fuzzy_confirmed_source_pair(
+    remote_entry: ParatranzData,
+    local_entry: ParatranzData,
+    classification: str | None,
+) -> bool:
+    if classification not in {"source_changed", "entry_changed"}:
+        return True
+    remote_original = database_original_for_match(remote_entry)
+    local_original = database_original_for_match(local_entry)
+    if remote_original == local_original:
+        return True
+    if not remote_original or not local_original:
+        return False
+    return fuzz.ratio(remote_original, local_original) >= DATABASE_ORIGINAL_FUZZY_THRESHOLD
+
+
 def _should_compare_translation_side(local_entry: ParatranzData, options: _ComparisonOptions) -> bool:
     if not options.ignore_untranslated_local_translation_diffs:
         return True
@@ -458,32 +893,39 @@ def _has_meaningful_translation(entry: ParatranzData) -> bool:
     return bool(entry.translation.strip()) or int(entry.stage) > 0
 
 
-def _build_database_delta_entries(remote_entries: list[ParatranzData], local_entries: list[ParatranzData]) -> list[ParatranzData]:
-    if not local_entries:
-        return []
-    next_new_key = _next_database_key_counter(remote_entries)
-    delta_entries: list[ParatranzData] = []
-    for local_entry in local_entries:
-        output_entry, next_new_key = _database_output_entry(None, local_entry, next_new_key)
-        delta_entries.append(output_entry)
-    return delta_entries
-
-
 def _database_output_entry(
     remote_entry: ParatranzData | None,
     local_entry: ParatranzData,
     next_new_key: int,
+    classification: str | None,
+    options: _ComparisonOptions,
 ) -> tuple[ParatranzData, int]:
     if remote_entry is not None:
+        if classification in {"source_changed", "entry_changed"}:
+            return _source_retranslation_entry(remote_entry, local_entry), next_new_key
         return local_entry.model_copy(update={"key": remote_entry.key}), next_new_key
     return local_entry.model_copy(update={"key": str(next_new_key)}), next_new_key + 1
 
 
-def _next_database_key_counter(entries: list[ParatranzData]) -> int:
-    for entry in reversed(entries):
-        if is_numeric_database_key(entry.key):
-            return int(entry.key) + 1
-    return 0
+def _dll_output_entry(
+    remote_entry: ParatranzData,
+    local_entry: ParatranzData,
+    classification: str | None,
+    options: _ComparisonOptions,
+) -> ParatranzData:
+    if classification in {"source_changed", "entry_changed"}:
+        return _source_retranslation_entry(remote_entry, local_entry)
+    return local_entry
+
+
+def _source_retranslation_entry(remote_entry: ParatranzData, local_entry: ParatranzData) -> ParatranzData:
+    return remote_entry.model_copy(
+        update={
+            "original": local_entry.original,
+            "stage": StageEnum.untranslated,
+            "context": local_entry.context,
+        }
+    )
 
 
 def _reconcile_unmatched_database_pairs(
@@ -536,15 +978,22 @@ def _write_diff_file(
     return target_file.as_posix() if wrote else None
 
 
-def _write_delta_file(entries: list[ParatranzData], target_file: Path) -> str | None:
+def _write_report_entries(
+    paths: dict[str, str],
+    category: str,
+    entries: list[ParatranzData],
+    target_file: Path,
+) -> None:
+    path = _write_entries_file(entries, target_file)
+    if path is not None:
+        paths[category] = path
+
+
+def _write_entries_file(entries: list[ParatranzData], target_file: Path) -> str | None:
     if not entries:
         return None
     write_paratranz_file(target_file, entries)
     return target_file.as_posix()
-
-
-def _delta_file_path(root: Path, relative: Path) -> Path:
-    return root / relative
 
 
 def _resolve_scope_dir(scope: str) -> str:
@@ -576,6 +1025,17 @@ def _scope_package_has_no_meaningful_translations(scope_package: _ScopePackage) 
         if _has_meaningful_translation(entry):
             return False
     return True
+
+
+def _database_key_seed_entries(
+    remote_scope_package: _ScopePackage,
+    relative: Path,
+    *,
+    scope_dir: str,
+) -> list[ParatranzData]:
+    if scope_dir == DLC_GAME_DIR:
+        return remote_scope_package.database_key_seed_entries_by_relative.get(relative, [])
+    return remote_scope_package.database_entries_by_relative.get(relative, [])
 
 
 def _build_local_scope_package(local_base: Path, scope_dir: str) -> _ScopePackage:
@@ -627,6 +1087,7 @@ def _read_standard_scope_package(scope_root: Path, scope_dir: str, *, label: str
         dll_entries=read_paratranz_file(scope_root / DLL_STRINGS_FILE),
         label=label,
         scope_dir=scope_dir,
+        database_key_seed_entries_by_relative=database_entries_by_relative,
     )
 
 
@@ -659,6 +1120,7 @@ def _read_legacy_remote_packages(remote_base: Path) -> tuple[_ScopePackage, _Sco
             dll_entries=main_dll_entries,
             label="ParaTranz",
             scope_dir=MAIN_GAME_DIR,
+            database_key_seed_entries_by_relative=main_database,
         ),
         _ScopePackage(
             root=remote_base,
@@ -666,6 +1128,7 @@ def _read_legacy_remote_packages(remote_base: Path) -> tuple[_ScopePackage, _Sco
             dll_entries=dlc_dll_entries,
             label="ParaTranz",
             scope_dir=DLC_GAME_DIR,
+            database_key_seed_entries_by_relative=dlc_database,
         ),
     )
 
@@ -682,12 +1145,20 @@ def _merge_scope_packages(remote_base: Path, main_package: _ScopePackage, dlc_pa
         )
         for relative in relative_files
     }
+    key_seed_database = {
+        relative: (
+            dlc_package.database_entries_by_relative.get(relative)
+            or main_package.database_entries_by_relative.get(relative, [])
+        )
+        for relative in relative_files
+    }
     return _ScopePackage(
         root=remote_base,
         database_entries_by_relative=merged_database,
         dll_entries=_merge_dll_entries(main_package.dll_entries, dlc_package.dll_entries),
         label=label,
         scope_dir=DLC_GAME_DIR,
+        database_key_seed_entries_by_relative=key_seed_database,
     )
 
 
@@ -698,6 +1169,7 @@ def _empty_scope_package(remote_base: Path, scope_dir: str, *, label: str) -> _S
         dll_entries=[],
         label=label,
         scope_dir=scope_dir,
+        database_key_seed_entries_by_relative={},
     )
 
 
@@ -809,6 +1281,10 @@ __all__ = [
     "CompareParatranzFileReport",
     "CompareParatranzResult",
     "CompareParatranzSummary",
+    "UploadCompareChangeAction",
+    "UploadCompareChangesResult",
+    "UploadCompareChangesSummary",
     "compare_downloaded_paratranz_scope",
     "download_and_compare_paratranz",
+    "upload_compare_source_changes",
 ]

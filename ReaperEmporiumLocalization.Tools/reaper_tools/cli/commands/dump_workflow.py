@@ -91,15 +91,13 @@ def compare_paratranz_command(
     local_mode = getattr(result, "local_mode", "translation_package")
     if local_mode == "source_text":
         context.logger.success(
-            "已完成 ParaTranz 对比（源文本模式）：{}，扫描 {} 个文件，远端独有文件 {} 个 / 词条 {} 条，本地独有文件 {} 个 / 词条 {} 条，"
-            "原文变化 {} 条，译文变化已忽略。报告：{}",
+            "已完成 ParaTranz 对比（源文本模式）：{}，扫描 {} 个文件，原文修正 {} 条，新增词条 {} 条，"
+            "远端残留 {} 条，译文变化已忽略。报告：{}",
             result.scope_dir,
             result.summary.scanned_files,
-            result.summary.remote_only_files,
-            result.summary.remote_only_entries,
-            result.summary.local_only_files,
+            result.summary.source_changed_entries + result.summary.entry_changed_entries,
             result.summary.local_only_entries,
-            result.summary.source_changed_entries,
+            result.summary.remote_only_entries,
             result.report_path,
         )
     else:

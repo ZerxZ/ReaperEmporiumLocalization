@@ -73,6 +73,14 @@ COMPARE_PARATRANZ_COMMAND = CommandMetadata(
     short_help="下载 ParaTranz 并对比本体或 DLC。",
 )
 
+UPLOAD_COMPARE_CHANGES_COMMAND = CommandMetadata(
+    key="upload_compare_changes",
+    name="上传对比变化",
+    aliases=("upload-compare-changes",),
+    help="把 compare-paratranz 产出的 source_changed / entry_changed 词条逐条上传到 ParaTranz；默认只预览。",
+    short_help="上传对比中的原文类变化。",
+)
+
 MIGRATE_TRANSLATIONS_COMMAND = CommandMetadata(
     key="migrate_translations",
     name="迁移翻译",
@@ -114,6 +122,7 @@ COMMAND_METADATA = (
     STATS_COMMAND,
     BUILD_DUMP_COMMAND,
     COMPARE_PARATRANZ_COMMAND,
+    UPLOAD_COMPARE_CHANGES_COMMAND,
     MIGRATE_TRANSLATIONS_COMMAND,
     MIGRATE_TERMS_COMMAND,
     UPLOAD_TRANSLATIONS_COMMAND,
@@ -142,4 +151,5 @@ __all__ = [
     "PromptSpec",
     "STATS_COMMAND",
     "UPLOAD_TRANSLATIONS_COMMAND",
+    "UPLOAD_COMPARE_CHANGES_COMMAND",
 ]

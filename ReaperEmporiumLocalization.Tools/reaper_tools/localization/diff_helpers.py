@@ -138,6 +138,14 @@ def is_numeric_database_key(key: str) -> bool:
     return key.isdecimal()
 
 
+def next_database_key_counter(entries: list[ParatranzData]) -> int:
+    """Continue from the last numeric key in file order, matching build-dump DLC key rules."""
+    for entry in reversed(entries):
+        if is_numeric_database_key(entry.key):
+            return int(entry.key) + 1
+    return 0
+
+
 def normalized_paratranz_json_text(entries: list[ParatranzData]) -> str:
     payload = [entry.model_dump(mode="json") for entry in entries]
     return json.dumps(payload, ensure_ascii=False, indent=2)
@@ -260,6 +268,7 @@ __all__ = [
     "format_readable_json_diff",
     "is_numeric_database_key",
     "json_files",
+    "next_database_key_counter",
     "normalized_entry_json_text",
     "normalized_paratranz_json_text",
     "write_paratranz_file",

@@ -12,7 +12,7 @@ from click.testing import CliRunner
 import main as root_main
 from reaper_tools.cli.commands import ALL_COMMANDS
 from reaper_tools.cli.main import cli, main as cli_main
-from reaper_tools.cli.registry import COMMAND_METADATA, COMPARE_PARATRANZ_COMMAND, DOWNLOAD_COMMAND
+from reaper_tools.cli.registry import COMMAND_METADATA, COMPARE_PARATRANZ_COMMAND, DOWNLOAD_COMMAND, UPLOAD_COMPARE_CHANGES_COMMAND
 
 
 class CliRegressionTests(unittest.TestCase):
@@ -75,6 +75,42 @@ class CliRegressionTests(unittest.TestCase):
         self.assertEqual(mock_compare.call_args.kwargs["scope"], "main")
         self.assertEqual(mock_compare.call_args.kwargs["local_root"], Path("custom"))
         self.assertEqual(mock_compare.call_args.kwargs["output_root"], Path("out"))
+
+    def test_upload_compare_changes_command_forwards_custom_paths(self) -> None:
+        runner = CliRunner()
+        fake_result = SimpleNamespace(
+            scope_dir="DLCGame",
+            compare_root=Path("build/compare_paratranz/DLCGame"),
+            report_path=Path("build/compare_paratranz/DLCGame/report.json"),
+            errors=[],
+            summary=SimpleNamespace(
+                scanned_files=2,
+                source_changed_entries=1,
+                entry_changed_entries=1,
+                translation_changed_entries=0,
+                new_entries=0,
+                planned_entries=2,
+                succeeded_entries=0,
+                failed_entries=0,
+                skipped_entries=0,
+            ),
+        )
+        fake_api = SimpleNamespace(project_id=123)
+
+        with (
+            patch("reaper_tools.cli.commands.paratranz_remote.Paratranz", return_value=fake_api),
+            patch("reaper_tools.cli.commands.paratranz_remote.upload_compare_source_changes", return_value=fake_result) as mock_upload,
+        ):
+            result = runner.invoke(
+                cli,
+                [UPLOAD_COMPARE_CHANGES_COMMAND.aliases[0], "--scope", "dlc", "--compare-root", "compare-out"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        mock_upload.assert_called_once()
+        self.assertEqual(mock_upload.call_args.kwargs["scope"], "dlc")
+        self.assertEqual(mock_upload.call_args.kwargs["compare_root"], Path("compare-out"))
+        self.assertTrue(mock_upload.call_args.kwargs["dry_run"])
 
 
 if __name__ == "__main__":

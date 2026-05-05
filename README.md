@@ -384,6 +384,16 @@ cd ReaperEmporiumLocalization.Tools
 .\.venv\Scripts\python.exe main.py 构建差异
 ```
 
+更新游戏文本并同步 ParaTranz 原文修正时，常用流程是：
+
+```powershell
+cd ReaperEmporiumLocalization.Tools
+reaper-tools 下载对比 --scope dlc --local-root data\0-DumpData --progress
+reaper-tools 上传对比变化 --scope dlc --execute --progress
+```
+
+`上传对比变化` 会读取 `下载对比` 产出的 `delta/` 下各类 JSON，并逐条调用 ParaTranz string API：原文修正和整体变化会保留原有译文并把 `stage` 写回 `0`，新增词条会按远端 DLC key、远端 MainGame key、从 `0` 开始的顺序分配 key 后创建 string；远端残留仍只导出供人工检查，不会自动删除。
+
 ---
 
 ## 源代码结构

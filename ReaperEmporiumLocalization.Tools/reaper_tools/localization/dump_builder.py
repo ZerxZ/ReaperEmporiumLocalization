@@ -17,8 +17,8 @@ from .diff_helpers import (
     diff_entries_by_patch as _diff_entries_by_patch,
     entries_differ_by_patch as _entries_differ_by_patch,
     format_readable_json_diff as _format_readable_json_diff,
-    is_numeric_database_key as _is_numeric_database_key,
     json_files as _json_files,
+    next_database_key_counter as _next_database_key_counter,
     normalized_paratranz_json_text as _normalized_paratranz_json_text,
     write_paratranz_file as _write_paratranz_file,
 )
@@ -277,14 +277,6 @@ def _database_output_entry(pair: _EntryDiff, next_new_key: int) -> tuple[Paratra
     if pair.main_entry is not None:
         return pair.dlc_entry.model_copy(update={"key": pair.main_entry.key}), next_new_key
     return pair.dlc_entry.model_copy(update={"key": str(next_new_key)}), next_new_key + 1
-
-
-def _next_database_key_counter(entries: list[ParatranzData]) -> int:
-    """从 MainGame 当前文件顺序中最后一个数字 key 后继续计数。"""
-    for entry in reversed(entries):
-        if _is_numeric_database_key(entry.key):
-            return int(entry.key) + 1
-    return 0
 
 
 def _diff_entries(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[ParatranzData]:

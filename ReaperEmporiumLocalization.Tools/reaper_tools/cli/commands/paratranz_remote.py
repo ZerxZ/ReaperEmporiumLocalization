@@ -6,7 +6,8 @@ import click
 
 from reaper_tools.cli.common import HELP_OPTION_NAMES, LocalizedCommand, get_command_app_context, is_interactive_tty, with_aliases
 from reaper_tools.cli.prompts import confirm_remote_write
-from reaper_tools.cli.registry import MIGRATE_TERMS_COMMAND, UPLOAD_TRANSLATIONS_COMMAND
+from reaper_tools.cli.registry import MIGRATE_TERMS_COMMAND, UPLOAD_COMPARE_CHANGES_COMMAND, UPLOAD_TRANSLATIONS_COMMAND
+from reaper_tools.localization.compare_paratranz import upload_compare_source_changes
 from reaper_tools.localization.paratranz import Paratranz
 
 
@@ -64,6 +65,73 @@ def migrate_terms_command(
         context.logger.warning("术语迁移过程中有 {} 个失败页：{}", len(result.errors), " | ".join(result.errors))
     if not execute:
         context.logger.info("默认只预览计划；确认无误后加 --execute 才会写入目标 ParaTranz 项目。")
+    return 0
+
+
+@with_aliases(*UPLOAD_COMPARE_CHANGES_COMMAND.aliases)
+@click.command(
+    UPLOAD_COMPARE_CHANGES_COMMAND.name,
+    cls=LocalizedCommand,
+    context_settings={"help_option_names": HELP_OPTION_NAMES},
+    help=UPLOAD_COMPARE_CHANGES_COMMAND.help,
+    short_help=UPLOAD_COMPARE_CHANGES_COMMAND.short_help,
+)
+@click.option(
+    "--scope",
+    type=click.Choice(("main", "dlc"), case_sensitive=False),
+    required=True,
+    help="选择 compare-paratranz 的作用域：main 对应 MainGame，dlc 对应 DLCGame。",
+)
+@click.option("--compare-root", type=click.Path(path_type=Path), help="对比结果根目录；未传时默认使用 build/compare_paratranz。")
+@click.option("--project-id", type=int, help="目标 ParaTranz 项目 ID；未传时默认使用 .env 里的 PARATRANZ_PROJECT_ID。")
+@click.option("--execute", is_flag=True, help="真正执行上传；未传时仅预览上传计划。")
+@click.option("--progress", is_flag=True, help="显示逐条上传进度。")
+def upload_compare_changes_command(
+    scope: str,
+    compare_root: Path | None,
+    project_id: int | None,
+    execute: bool,
+    progress: bool,
+) -> int:
+    """把 compare-paratranz 的 delta 逐条写回 ParaTranz。"""
+    context = get_command_app_context()
+    api = Paratranz(context=context)
+    resolved_project_id = project_id or api.project_id
+    _confirm_execute_if_needed(
+        "上传对比变化",
+        f"作用域 {scope} -> 目标项目 {resolved_project_id}",
+        execute,
+    )
+    result = upload_compare_source_changes(
+        scope=scope,
+        compare_root=compare_root,
+        project_id=project_id,
+        dry_run=not execute,
+        show_progress=progress,
+        context=context,
+        api=api,
+    )
+    context.logger.success(
+        "{}上传对比变化：{}，目标项目 {}，扫描 {} 个 delta 文件，原文修正 {} 条，整体变化 {} 条，"
+        "译文变化 {} 条，新增 {} 条，计划 {} 条，成功 {} 条，失败 {} 条，跳过 {} 条。来源：{}",
+        "[dry-run] " if not execute else "",
+        result.scope_dir,
+        resolved_project_id,
+        result.summary.scanned_files,
+        result.summary.source_changed_entries,
+        result.summary.entry_changed_entries,
+        result.summary.translation_changed_entries,
+        result.summary.new_entries,
+        result.summary.planned_entries,
+        result.summary.succeeded_entries,
+        result.summary.failed_entries,
+        result.summary.skipped_entries,
+        result.compare_root / "delta",
+    )
+    if result.errors:
+        context.logger.warning("上传对比变化过程中有 {} 条失败或提示：{}", len(result.errors), " | ".join(result.errors))
+    if not execute:
+        context.logger.info("默认只预览计划；确认无误后加 --execute 才会真正写入 ParaTranz。")
     return 0
 
 
