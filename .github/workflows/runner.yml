@@ -156,6 +156,15 @@ jobs:
           Get-ChildItem -LiteralPath $staging -Recurse -Force -Filter "*.log" |
             Remove-Item -Force
 
+          foreach ($runtimeDir in @("BepInEx\plugins", "BepInEx\patchers")) {
+            $runtimePath = Join-Path $staging $runtimeDir
+            if (Test-Path $runtimePath) {
+              Get-ChildItem -LiteralPath $runtimePath -Recurse -Force -File |
+                Where-Object { $_.Extension -ine ".dll" } |
+                Remove-Item -Force
+            }
+          }
+
           $localizationDir = Join-Path $staging "localization"
           New-Item -ItemType Directory -Force -Path $localizationDir | Out-Null
           foreach ($generatedSubdir in @("database", "dll_strings")) {
@@ -203,6 +212,17 @@ jobs:
 
             if ($names | Where-Object { $_.EndsWith(".log", [System.StringComparison]::OrdinalIgnoreCase) }) {
               throw "Log files must not be included in the release package."
+            }
+
+            $runtimeFiles = $names |
+              Where-Object {
+                ($_.StartsWith("BepInEx/plugins/") -or $_.StartsWith("BepInEx/patchers/")) -and
+                -not $_.EndsWith("/")
+              }
+            $nonDllRuntimeFiles = $runtimeFiles |
+              Where-Object { -not $_.EndsWith(".dll", [System.StringComparison]::OrdinalIgnoreCase) }
+            if ($nonDllRuntimeFiles) {
+              throw "Release package plugin/patcher directories must contain DLL files only: $($nonDllRuntimeFiles -join ', ')"
             }
           }
           finally {

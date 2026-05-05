@@ -487,6 +487,8 @@ GitHub Actions 使用 `.github/workflows/runner.yml` 生成最终发布包。该
 
 当前发布壳里的 BepInEx 参考版本为 `v5.4.23.5`；如需更新或核对版本，请查看 [BepInEx Releases][bepinex-releases]。
 
+发布包里的 `BepInEx/plugins` 和 `BepInEx/patchers` 只保留运行所需的 `.dll` 文件；Release 构建产生的 `.pdb`、`.deps.json` 等调试或构建辅助文件会在组合发布包时移除。
+
 最终发布的 zip 设计为直接解压到游戏根目录，根目录应包含：
 
 - `BepInEx/`
