@@ -31,20 +31,27 @@ def build_dump_command(progress: bool) -> int:
     context = get_command_app_context()
     stats = build_dump_diff(show_progress=progress, context=context)
     context.logger.success(
-        "已构建转储差异：MainGame {} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条；"
-        "DLCGame 写入/读取 {} / {} 个数据库文件，{} / {} 条数据库词条，{} / {} 条 DLL 词条；"
-        "diff 输出 {} 个数据库 diff 文件，{} 个 DLL diff 文件",
+        "已构建转储差异：MainGame {} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条，{} 个 scene 文件，{} 条 scene 词条；"
+        "DLCGame 写入/读取 {} / {} 个数据库文件，{} / {} 条数据库词条，{} / {} 条 DLL 词条，{} / {} 个 scene 文件，{} / {} 条 scene 词条；"
+        "diff 输出 {} 个数据库 diff 文件，{} 个 DLL diff 文件，{} 个 scene diff 文件",
         stats.main_database_files,
         stats.main_database_entries,
         stats.main_dll_entries,
+        stats.main_scene_files,
+        stats.main_scene_entries,
         stats.dlc_database_files_written,
         stats.dlc_database_files_read,
         stats.dlc_database_entries_written,
         stats.dlc_database_entries_read,
         stats.dlc_dll_entries_written,
         stats.dlc_dll_entries_read,
+        stats.dlc_scene_files_written,
+        stats.dlc_scene_files_read,
+        stats.dlc_scene_entries_written,
+        stats.dlc_scene_entries_read,
         stats.diff_database_files_written,
         stats.diff_dll_files_written,
+        stats.diff_scene_files_written,
     )
     return 0
 
@@ -201,10 +208,12 @@ def package_final_command(
         context=context,
     )
     context.logger.success(
-        "已生成最终本地化包：{} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条，{} 个输出 JSON{}",
+        "已生成最终本地化包：{} 个数据库文件，{} 条数据库词条，{} 条 DLL 词条，{} 个 scene 文件，{} 条 scene 词条，{} 个输出 JSON{}",
         stats.database_files,
         stats.database_entries,
         stats.dll_entries,
+        stats.scene_files,
+        stats.scene_entries,
         stats.written_files,
         f"，zip：{stats.zip_path}" if stats.zip_path else "",
     )

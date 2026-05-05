@@ -216,6 +216,8 @@ EnableDllDump = true
 
 当前场景翻译缓存支持热重载；按 `F5` 后，下次命中 `Awake` 会重新读取对应场景文件。
 
+维护翻译时，运行时导出的 scene JSON 可以放入工具侧标准包结构 `data/0-DumpData/MainGame/scene/` 或 `data/0-DumpData/DLCGame/scene/`。`reaper-tools 构建差异` 会把 MainGame scene 完整复制，并按 `original` 只输出 DLCGame scene 的新增或变化词条；最终打包会合并到运行时目录 `localization/scene/`。
+
 ---
 
 ## 字体替换
@@ -371,6 +373,28 @@ HotReloadKey = F5
 - `HotReloadKey`
   - 运行时热重载按键
 
+数据库转储可以额外使用外部过滤配置，只按清理后的 `assetName` 判断，不读取也不匹配 `bundleName`。配置文件不存在时会自动生成默认模板，默认会排除图片资源索引、声音资源使用表、语音角色表等不需要翻译维护的数据库：
+
+```text
+游戏根目录/localization/config/database_dump_filter.json
+```
+
+```json
+{
+  "excluded_asset_names": [
+    "db_Direct",
+    "db_VoiceChara",
+    "db_ResourceSoundBgmUse",
+    "db_ResourceSoundSeUse"
+  ],
+  "excluded_asset_name_regex": [
+    "^db_Image"
+  ]
+}
+```
+
+`excluded_asset_names` 是大小写敏感的精确匹配，`excluded_asset_name_regex` 是作用于 `assetName` 的 .NET 正则。无效正则只会记录 warning 并忽略该条规则。
+
 ---
 
 ## 翻译工具与差异构建
@@ -395,6 +419,16 @@ reaper-tools 上传对比变化 --scope dlc --execute --progress
 ```
 
 `上传对比变化` 会读取 `下载对比` 产出的 `delta/` 下各类 JSON，并逐条调用 ParaTranz string API：原文修正和整体变化会保留原有译文并把 `stage` 写回 `0`，新增词条会按远端 DLC key、远端 MainGame key、从 `0` 开始的顺序分配 key 后创建 string；远端残留仍只导出供人工检查，不会自动删除。
+
+如果需要把已经进入 ParaTranz 的过滤数据库文件一起清理，可以先预览再执行：
+
+```powershell
+cd ReaperEmporiumLocalization.Tools
+reaper-tools 删除过滤文件 --progress
+reaper-tools 删除过滤文件 --execute --progress
+```
+
+`删除过滤文件` 使用同一份 `database_dump_filter.json` 的 `assetName` 规则，仅匹配 `database/**/*.json`，默认只 dry-run，确认列表无误后才加 `--execute` 删除 ParaTranz 远端文件。
 
 ---
 
@@ -496,6 +530,7 @@ GitHub Actions 使用 `.github/workflows/runner.yml` 生成最终发布包。该
 - `localization/database/`
 - `localization/dll_strings/`
 - `localization/fonts/`
+- `localization/scene/`
 - `.doorstop_version`
 - `doorstop_config.ini`
 - `winhttp.dll`

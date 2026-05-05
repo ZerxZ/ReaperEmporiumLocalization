@@ -42,6 +42,51 @@ class DumpBuilderDiffTests(unittest.TestCase):
             self.assertTrue(output_file.is_file())
             self.assertEqual(stats.dlc_database_files_written, 1)
 
+    def test_build_dump_diff_copies_main_scene_and_writes_dlc_scene_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dump_root = root / "data" / "0-DumpData"
+            self._write_entries(dump_root / "MainGame" / "database" / "db_Test.json", [])
+            self._write_entries(dump_root / "MainGame" / "dll_strings.json", [])
+            self._write_entries(dump_root / "DLCGame" / "database" / "db_Test.json", [])
+            self._write_entries(dump_root / "DLCGame" / "dll_strings.json", [])
+            self._write_entries(
+                dump_root / "MainGame" / "scene" / "SceneTitle.json",
+                [
+                    self._entry("0", "Shared", "共同", 1),
+                    self._entry("1", "Changed", "Main", 1),
+                ],
+            )
+            self._write_entries(
+                dump_root / "DLCGame" / "scene" / "SceneTitle.json",
+                [
+                    self._entry("20", "Shared", "共同", 1),
+                    self._entry("21", "Changed", "DLC", 1),
+                    self._entry("22", "Only DLC", "DLC only", 1),
+                ],
+            )
+
+            with patch.object(dump_builder, "paths", _FakePaths(root)):
+                stats = build_dump_diff(show_progress=False)
+
+            main_scene = json.loads((root / "build" / "dump" / "MainGame" / "scene" / "SceneTitle.json").read_text(encoding="utf-8"))
+            dlc_scene = json.loads((root / "build" / "dump" / "DLCGame" / "scene" / "SceneTitle.json").read_text(encoding="utf-8"))
+            diff_text = (root / "build" / "dump" / "diff" / "scene" / "SceneTitle.json.diff").read_text(encoding="utf-8")
+
+        self.assertEqual([entry["original"] for entry in main_scene], ["Shared", "Changed"])
+        self.assertEqual([entry["original"] for entry in dlc_scene], ["Changed", "Only DLC"])
+        self.assertEqual(stats.main_scene_files, 1)
+        self.assertEqual(stats.main_scene_entries, 2)
+        self.assertEqual(stats.dlc_scene_files_read, 1)
+        self.assertEqual(stats.dlc_scene_files_written, 1)
+        self.assertEqual(stats.dlc_scene_entries_read, 3)
+        self.assertEqual(stats.dlc_scene_entries_written, 2)
+        self.assertEqual(stats.diff_scene_files_written, 1)
+        self.assertIn("--- MainGame/scene/SceneTitle.json", diff_text)
+        self.assertIn("+++ DLCGame/scene/SceneTitle.json", diff_text)
+        self.assertIn('"original": "Only DLC"', diff_text)
+        self.assertNotIn('"original": "Shared"', diff_text)
+
     def test_database_diff_is_written_to_dlc_json_and_readable_dmp_diff_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

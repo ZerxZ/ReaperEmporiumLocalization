@@ -81,6 +81,14 @@ UPLOAD_COMPARE_CHANGES_COMMAND = CommandMetadata(
     short_help="上传对比中的原文类变化。",
 )
 
+DELETE_FILTERED_FILES_COMMAND = CommandMetadata(
+    key="delete_filtered_files",
+    name="删除过滤文件",
+    aliases=("delete-filtered-files",),
+    help="按 database_dump_filter.json 匹配 assetName，删除 ParaTranz 远端数据库文件；默认只预览。",
+    short_help="删除 ParaTranz 中按过滤规则排除的数据库文件。",
+)
+
 MIGRATE_TRANSLATIONS_COMMAND = CommandMetadata(
     key="migrate_translations",
     name="迁移翻译",
@@ -123,6 +131,7 @@ COMMAND_METADATA = (
     BUILD_DUMP_COMMAND,
     COMPARE_PARATRANZ_COMMAND,
     UPLOAD_COMPARE_CHANGES_COMMAND,
+    DELETE_FILTERED_FILES_COMMAND,
     MIGRATE_TRANSLATIONS_COMMAND,
     MIGRATE_TERMS_COMMAND,
     UPLOAD_TRANSLATIONS_COMMAND,
@@ -141,6 +150,7 @@ __all__ = [
     "COMMAND_METADATA_BY_NAME",
     "COMPARE_PARATRANZ_COMMAND",
     "CommandMetadata",
+    "DELETE_FILTERED_FILES_COMMAND",
     "DOWNLOAD_COMMAND",
     "INSTALL_COMMAND",
     "MENU_COMMAND_NAMES",

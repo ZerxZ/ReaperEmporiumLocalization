@@ -12,7 +12,13 @@ from click.testing import CliRunner
 import main as root_main
 from reaper_tools.cli.commands import ALL_COMMANDS
 from reaper_tools.cli.main import cli, main as cli_main
-from reaper_tools.cli.registry import COMMAND_METADATA, COMPARE_PARATRANZ_COMMAND, DOWNLOAD_COMMAND, UPLOAD_COMPARE_CHANGES_COMMAND
+from reaper_tools.cli.registry import (
+    COMMAND_METADATA,
+    COMPARE_PARATRANZ_COMMAND,
+    DELETE_FILTERED_FILES_COMMAND,
+    DOWNLOAD_COMMAND,
+    UPLOAD_COMPARE_CHANGES_COMMAND,
+)
 
 
 class CliRegressionTests(unittest.TestCase):
@@ -111,6 +117,39 @@ class CliRegressionTests(unittest.TestCase):
         self.assertEqual(mock_upload.call_args.kwargs["scope"], "dlc")
         self.assertEqual(mock_upload.call_args.kwargs["compare_root"], Path("compare-out"))
         self.assertTrue(mock_upload.call_args.kwargs["dry_run"])
+
+    def test_delete_filtered_files_command_forwards_custom_config(self) -> None:
+        runner = CliRunner()
+        fake_result = SimpleNamespace(
+            project_id=123,
+            dry_run=True,
+            filter_config=SimpleNamespace(source_path=Path("filter.json"), invalid_regex=()),
+            actions=[],
+            errors=[],
+            summary=SimpleNamespace(
+                scanned_files=5,
+                matched_files=2,
+                planned_files=2,
+                deleted_files=0,
+                failed_files=0,
+                skipped_files=0,
+            ),
+        )
+        fake_api = SimpleNamespace(project_id=123)
+
+        with (
+            patch("reaper_tools.cli.commands.paratranz_remote.Paratranz", return_value=fake_api),
+            patch("reaper_tools.cli.commands.paratranz_remote.delete_filtered_database_files", return_value=fake_result) as mock_delete,
+        ):
+            result = runner.invoke(
+                cli,
+                [DELETE_FILTERED_FILES_COMMAND.aliases[0], "--config-path", "filter.json"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        mock_delete.assert_called_once()
+        self.assertEqual(mock_delete.call_args.kwargs["config_path"], Path("filter.json"))
+        self.assertTrue(mock_delete.call_args.kwargs["dry_run"])
 
 
 if __name__ == "__main__":

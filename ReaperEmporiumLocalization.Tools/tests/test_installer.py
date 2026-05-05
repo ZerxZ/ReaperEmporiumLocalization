@@ -134,6 +134,20 @@ class InstallerPathTests(unittest.TestCase):
                     },
                 ],
             )
+            self._write_entries(
+                source / "MainGame" / "scene" / "SceneTitle.json",
+                [
+                    {"key": "0", "original": "Scene Shared", "translation": "Main scene", "stage": 1, "context": ""},
+                    {"key": "1", "original": "Scene Main", "translation": "Only main scene", "stage": 1, "context": ""},
+                ],
+            )
+            self._write_entries(
+                source / "DLCGame" / "scene" / "SceneTitle.json",
+                [
+                    {"key": "10", "original": "Scene Shared", "translation": "DLC scene", "stage": 1, "context": ""},
+                    {"key": "11", "original": "Scene DLC", "translation": "Only dlc scene", "stage": 1, "context": ""},
+                ],
+            )
 
             stats = package_final_localization(source, output_root=output, zip_path=zip_path)
 
@@ -147,6 +161,7 @@ class InstallerPathTests(unittest.TestCase):
                 (output / "database" / "asset_02_text" / "db_Test.json").read_text(encoding="utf-8")
             )
             dll_entries = json.loads((output / "dll_strings" / "dll_strings.json").read_text(encoding="utf-8"))
+            scene_entries = json.loads((output / "scene" / "SceneTitle.json").read_text(encoding="utf-8"))
             with ZipFile(zip_path) as archive:
                 zip_names = sorted(archive.namelist())
                 disclaimer_text = archive.read("DISCLAIMER.txt").decode("utf-8")
@@ -158,13 +173,19 @@ class InstallerPathTests(unittest.TestCase):
         self.assertEqual(stats.database_files, 3)
         self.assertEqual(stats.database_entries, 5)
         self.assertEqual(stats.dll_entries, 3)
-        self.assertEqual(stats.written_files, 4)
+        self.assertEqual(stats.scene_files, 1)
+        self.assertEqual(stats.scene_entries, 3)
+        self.assertEqual(stats.written_files, 5)
         self.assertEqual([entry["translation"] for entry in merged_database], ["DLC", "Main only", "DLC only"])
         self.assertEqual(bundle_a[0]["original"], "Bundle A")
         self.assertEqual(bundle_b[0]["original"], "Bundle B")
         self.assertEqual(
             [entry["translation"] for entry in dll_entries],
             ["DLC DLL", "Only Main DLL", "Only DLC DLL"],
+        )
+        self.assertEqual(
+            [entry["translation"] for entry in scene_entries],
+            ["Only dlc scene", "Only main scene", "DLC scene"],
         )
         self.assertTrue(zip_exists)
         self.assertTrue(disclaimer_exists)
@@ -173,6 +194,7 @@ class InstallerPathTests(unittest.TestCase):
         self.assertIn("DISCLAIMER.txt", zip_names)
         self.assertIn("localization/database/asset_00_text/db_Test.json", zip_names)
         self.assertIn("localization/dll_strings/dll_strings.json", zip_names)
+        self.assertIn("localization/scene/SceneTitle.json", zip_names)
 
     def test_package_final_defaults_to_downloaded_paratranz_when_migrated_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -205,10 +227,15 @@ class InstallerPathTests(unittest.TestCase):
             merged_database = json.loads(
                 (output / "database" / "asset_00_text" / "db_Test.json").read_text(encoding="utf-8")
             )
+            with ZipFile(zip_path) as archive:
+                zip_names = sorted(archive.namelist())
+            scene_dir_exists = (output / "scene").is_dir()
             zip_exists = zip_path.is_file()
 
         self.assertEqual(stats.database_files, 1)
         self.assertEqual(merged_database[0]["translation"], "DLC")
+        self.assertTrue(scene_dir_exists)
+        self.assertIn("localization/scene/", zip_names)
         self.assertTrue(zip_exists)
 
     def _write_entries(self, path: Path, entries: list[dict]) -> None:

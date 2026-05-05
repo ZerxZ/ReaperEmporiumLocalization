@@ -15,6 +15,7 @@ from reaper_tools.models import ParatranzData, paratranz_data_list_adapter
 _CAB_SUFFIX_PATTERN = re.compile(r"-CAB-.*$")
 _NUMBER_SUFFIX_PATTERN = re.compile(r"_\d+$")
 _DISCLAIMER_FILE_NAME = "DISCLAIMER.txt"
+_SCENE_DIR = "scene"
 _DEFAULT_DISCLAIMER_TEXT = """免责声明
 
 1. 本项目仅提供《死神商館RExEX》的本地化插件源码、构建产物、翻译维护工具和相关说明。
@@ -55,6 +56,8 @@ class PackageStats:
     database_files: int = 0
     database_entries: int = 0
     dll_entries: int = 0
+    scene_files: int = 0
+    scene_entries: int = 0
     written_files: int = 0
     zip_path: Path | None = None
 
@@ -186,6 +189,14 @@ def package_final_localization(
     )
     if stats.dll_entries:
         stats.written_files += 1
+    stats.scene_files, stats.scene_entries = _package_scene_tree(
+        main_root / _SCENE_DIR,
+        dlc_root / _SCENE_DIR,
+        output / _SCENE_DIR,
+        show_progress=show_progress,
+        context=ctx,
+    )
+    stats.written_files += stats.scene_files
 
     disclaimer_text = _load_disclaimer_text(ctx.paths.root)
     _write_disclaimer_file(archive.parent / _DISCLAIMER_FILE_NAME, disclaimer_text)
@@ -387,6 +398,55 @@ def _merge_database_entries(main_entries: list[ParatranzData], dlc_entries: list
     return list(merged.values())
 
 
+def _package_scene_tree(
+    main_scene_root: Path,
+    dlc_scene_root: Path,
+    output_root: Path,
+    *,
+    show_progress: bool,
+    context: AppContext,
+) -> tuple[int, int]:
+    """按 scene 相对路径合并 MainGame 完整包和 DLCGame 差异包。"""
+    output_root.mkdir(parents=True, exist_ok=True)
+    relative_files = sorted(
+        {
+            file_path.relative_to(root)
+            for root in (main_scene_root, dlc_scene_root)
+            if root.exists()
+            for file_path in root.rglob("*.json")
+        },
+        key=lambda item: item.as_posix().casefold(),
+    )
+    entry_count = 0
+    with context.progress(total=len(relative_files), enabled=show_progress, desc="合并场景", unit="文件") as progress:
+        for relative in relative_files:
+            main_file = main_scene_root / relative
+            dlc_file = dlc_scene_root / relative
+            entries = _merge_scene_entries(
+                read_paratranz_file(main_file) if main_file.exists() else [],
+                read_paratranz_file(dlc_file) if dlc_file.exists() else [],
+            )
+            entry_count += len(entries)
+            _write_paratranz_file(output_root / relative, entries)
+            progress.set_postfix_str(relative.as_posix())
+            progress.update()
+    return len(relative_files), entry_count
+
+
+def _merge_scene_entries(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[ParatranzData]:
+    """Scene 以 original 为身份合并，同原文 DLC 覆盖 MainGame。"""
+    merged: dict[str, ParatranzData] = {}
+    for entry in main_entries:
+        original = entry.runtime_original
+        if original.strip():
+            merged.setdefault(original, entry)
+    for entry in dlc_entries:
+        original = entry.runtime_original
+        if original.strip():
+            merged[original] = entry
+    return sorted(merged.values(), key=lambda entry: entry.original)
+
+
 def _package_dll_strings(main_file: Path, dlc_file: Path, output_file: Path) -> int:
     """把 MainGame/DLCGame DLL 字符串合并成运行时唯一 dll_strings.json。"""
     candidates: dict[str, ParatranzData] = {}
@@ -433,13 +493,16 @@ def _write_localization_zip(localization_root: Path, zip_path: Path, *, disclaim
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     if zip_path.exists():
         zip_path.unlink()
-    files = sorted(localization_root.rglob("*"), key=lambda item: item.relative_to(localization_root).as_posix().casefold())
+    items = sorted(localization_root.rglob("*"), key=lambda item: item.relative_to(localization_root).as_posix().casefold())
     with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as archive:
         archive.writestr(_DISCLAIMER_FILE_NAME, disclaimer_text)
-        for file_path in files:
-            if file_path.is_file():
-                archive_name = (Path("localization") / file_path.relative_to(localization_root)).as_posix()
-                archive.write(file_path, archive_name)
+        archive.writestr("localization/", "")
+        for directory in (item for item in items if item.is_dir()):
+            archive_name = (Path("localization") / directory.relative_to(localization_root)).as_posix().rstrip("/") + "/"
+            archive.writestr(archive_name, "")
+        for file_path in (item for item in items if item.is_file()):
+            archive_name = (Path("localization") / file_path.relative_to(localization_root)).as_posix()
+            archive.write(file_path, archive_name)
 
 
 def _write_paratranz_file(target: Path, entries: list[ParatranzData]) -> None:

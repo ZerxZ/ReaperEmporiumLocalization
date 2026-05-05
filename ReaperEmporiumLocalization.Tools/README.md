@@ -16,6 +16,7 @@ reaper-tools 拉取安装 --progress
 reaper-tools 构建差异
 reaper-tools 下载对比 --scope dlc --local-root data\0-DumpData --progress
 reaper-tools 上传对比变化 --scope dlc --execute --progress
+reaper-tools 删除过滤文件 --progress
 reaper-tools 迁移翻译 --progress
 reaper-tools 迁移术语 --source-project-id 旧项目ID --progress
 reaper-tools 上传翻译 --project-id 新项目ID --progress
@@ -31,6 +32,7 @@ reaper-tools 最终打包 --progress
 | `构建差异` | `build-dump` | 根据 MainGame/DLCGame 转储数据构建差异输出。 |
 | `下载对比` | `compare-paratranz` | 下载 ParaTranz 最新导出包，并和本地 MainGame/DLCGame 标准包结构做双向对比。 |
 | `上传对比变化` | `upload-compare-changes` | 将 `下载对比` 产出的 `delta/` 逐条通过 ParaTranz string API 写回，默认只预览。 |
+| `删除过滤文件` | `delete-filtered-files` | 按 `database_dump_filter.json` 的 `assetName` 规则删除 ParaTranz 远端数据库文件，默认只预览。 |
 | `迁移翻译` | `migrate-translations` | 把旧 ParaTranz 译文迁移到新 `build/dump` 结构。 |
 | `迁移术语` | `migrate-terms` | 把旧 ParaTranz 项目的术语迁移到新 ParaTranz 项目。 |
 | `上传翻译` | `upload-translations` | 把人工检查后的 `build/migrated` 上传到目标 ParaTranz 项目，并把冲突候选逐次写入文件修订历史后再恢复最终译文。 |
@@ -47,6 +49,8 @@ reaper-tools 最终打包 --progress
 - `--compare-root`：指定 `下载对比` 结果根目录。
 - `--dry-run`：只预览迁移统计，不写入迁移结果。
 - `--execute`：对远端 ParaTranz 命令真正执行写入；未传时只预览计划。
+
+`删除过滤文件` 会读取游戏根目录 `localization/config/database_dump_filter.json`，找不到时使用内置默认规则：精确排除 `db_Direct`、`db_VoiceChara`、`db_ResourceSoundBgmUse`、`db_ResourceSoundSeUse`，并用 `^db_Image` 正则排除图片资源索引表。它只匹配 ParaTranz 远端的 `database/**/*.json`，不会处理 `scene` 或 `dll_strings.json`。
 
 ## 配置
 
@@ -99,9 +103,11 @@ data/0-DumpData/
   MainGame/
     database/{bundleName}/*.json
     dll_strings.json
+    scene/*.json
   DLCGame/
     database/{bundleName}/*.json
     dll_strings.json
+    scene/*.json
 ```
 
 然后写入：
@@ -111,12 +117,15 @@ build/dump/
   MainGame/
     database/{bundleName}/*.json
     dll_strings.json
+    scene/*.json
   DLCGame/
     database/{bundleName}/*.json
     dll_strings.json
+    scene/*.json
   diff/
     database/{bundleName}/*.json.diff
     dll_strings.json.diff
+    scene/*.json.diff
 ```
 
 处理规则：
@@ -125,9 +134,10 @@ build/dump/
 - `MainGame` 会完整复制。
 - `DLCGame` 的数据库文件会先判断 JSON 数组数量是否对等；数据库词条差异以 `original` 为主，等长数组用索引辅助，原文轻微变化用 `thefuzz` 只在尚未匹配过的 MainGame 词条里搜索，避免重复复用同一条原文。
 - 已匹配到 MainGame 的 DLC 数据库词条会改用 MainGame 的 `key`；完全新增的 DLC 词条会按当前 MainGame 文件的 key 顺序，从文件顺序最后一个数字 `key` 后继续编号，再由 `diff-match-patch` 判断规范化单条 JSON 是否变化。
+- Scene 文件使用同样的 ParaTranz JSON 格式；`MainGame/scene` 完整复制，`DLCGame/scene` 按同一 scene 文件里的 `original` 去重，只输出 DLC 新增或内容变化的词条。
 - `diff` 会额外保存可读行级差异文件，数据库 diff 基于同一套差异匹配结果，只展示需要同步的词条；差异计算仍使用 `diff-match-patch`，中文会按 UTF-8 原文写出。
 - `.diff` 文件头使用相对路径，例如 `--- MainGame/database/bundle/foo.json` 和 `+++ DLCGame/database/bundle/foo.json`，不会写入本机绝对路径。
-- `diff/database/bundle/foo.json.diff` 对应原始 `database/bundle/foo.json`，`diff/dll_strings.json.diff` 对应 DLL 字符串文件。
+- `diff/database/bundle/foo.json.diff` 对应原始 `database/bundle/foo.json`，`diff/scene/SceneName.json.diff` 对应 scene 文件，`diff/dll_strings.json.diff` 对应 DLL 字符串文件。
 - DLC 的 `dll_strings.json` 会按 `{类名}.{方法名}_{索引}` key 和词条内容精确比较，不再兼容旧的 `_IL_` key 迁移规则。
 - 空的 DLC 差异文件会跳过。
 
@@ -173,6 +183,7 @@ build/compare_paratranz/
     report.json
     diff/
       database/**/*.json.diff
+      scene/*.json.diff
       dll_strings.json.diff
     delta/
       source_updates/
@@ -205,7 +216,7 @@ build/compare_paratranz/
   - 只为已匹配的 `source_updates` / `entry_updates` 生成可读 diff。
   - `new_entries` 和 `remote_only` 不生成 diff，避免新增或残留淹没真正的原文修正。
 
-数据库词条匹配以 `original` 为主，等长数组时允许索引辅助，小文件会用 fuzz 匹配原文轻微修正；但真正输出 `source_updates` / `entry_updates` 前还会再次经过 fuzz 确认，避免把不相关词条错配成原文替换。DLL 词条仍按 `key + original` 精确规则为主。
+数据库词条匹配以 `original` 为主，等长数组时允许索引辅助，小文件会用 fuzz 匹配原文轻微修正；但真正输出 `source_updates` / `entry_updates` 前还会再次经过 fuzz 确认，避免把不相关词条错配成原文替换。Scene 文件会作为 `scene/*.json` 参与同一套下载对比输出，按 scene 文件内 `original` 匹配，新增词条 key 会从远端同 scene 文件最后一个数字 key 后继续。DLL 词条仍按 `key + original` 精确规则为主。
 
 ## 上传对比变化
 
@@ -325,6 +336,7 @@ build/package/
   localization/
     database/{bundleName}/*.json
     dll_strings/dll_strings.json
+    scene/*.json
   ReaperEmporiumLocalization-localization.zip
 ```
 
@@ -337,7 +349,7 @@ reaper-tools 最终打包 --progress
 
 如果你正在做迁移流程，也可以先执行 `构建差异`，需要套用旧 ParaTranz 译文时再执行 `迁移翻译`，最后同样执行 `最终打包`；此时默认会使用 `build/migrated`。
 
-合并时，同一路径数据库 JSON 会按 `original` 去重：先放入 `MainGame` 词条，`DLCGame` 同原文词条覆盖本体译文，DLC 新原文追加。DLL 会合并成单个 `localization/dll_strings/dll_strings.json`，同原文优先使用 DLC，再按 `stage/translation` 质量择优。zip 内包含 `localization/` 目录和根目录 `DISCLAIMER.txt`，可直接解压到游戏根目录。
+合并时，同一路径数据库 JSON 会按 `original` 去重：先放入 `MainGame` 词条，`DLCGame` 同原文词条覆盖本体译文，DLC 新原文追加。DLL 会合并成单个 `localization/dll_strings/dll_strings.json`，同原文优先使用 DLC，再按 `stage/translation` 质量择优。Scene 会从 `MainGame/scene` 与 `DLCGame/scene` 合并到 `localization/scene`，同一 scene 文件内按 `original` 合并且 DLC 覆盖 MainGame。zip 内包含 `localization/` 目录和根目录 `DISCLAIMER.txt`，可直接解压到游戏根目录。
 
 如果想跳过迁移，直接使用当前差异构建产物，也可以指定：
 

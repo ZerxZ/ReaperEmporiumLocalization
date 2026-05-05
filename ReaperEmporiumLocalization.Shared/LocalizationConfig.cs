@@ -105,6 +105,7 @@ namespace ReaperEmporiumLocalization.Shared
             EnsureDirectory(Path.Combine(localizationRoot, "dll_strings"));
             EnsureDirectory(Path.Combine(localizationRoot, "fonts"));
             EnsureDirectory(Path.Combine(localizationRoot, "scene"));
+            EnsureDirectory(Path.Combine(localizationRoot, "config"));
 
             string dumpRoot = Path.Combine(localizationRoot, "dump");
             EnsureDirectory(dumpRoot);

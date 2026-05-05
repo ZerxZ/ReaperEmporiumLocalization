@@ -175,6 +175,66 @@ class CompareParatranzTests(unittest.TestCase):
         self.assertEqual(mock_compare.call_args.kwargs["remote_root"], root / "downloaded")
         self.assertTrue(mock_compare.call_args.kwargs["show_progress"])
 
+    def test_compare_downloaded_paratranz_scope_compares_scene_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            remote_root = root / "remote"
+            local_root = root / "0-DumpData"
+            output_root = root / "out"
+
+            self._write_entries(remote_root / "MainGame" / "database" / "db_Test.json", [])
+            self._write_entries(remote_root / "MainGame" / "dll_strings.json", [])
+            self._write_entries(local_root / "MainGame" / "database" / "db_Test.json", [])
+            self._write_entries(local_root / "MainGame" / "dll_strings.json", [])
+            self._write_entries(
+                remote_root / "MainGame" / "scene" / "SceneTitle.json",
+                [
+                    self._entry("0", "Same scene", "same scene translation", 1),
+                    self._entry("1", "Scene old source.", "keep scene translation", 1, "remote ctx"),
+                    self._entry("2", "Remote scene stale", "stale", 1),
+                ],
+            )
+            self._write_entries(
+                local_root / "MainGame" / "scene" / "SceneTitle.json",
+                [
+                    self._entry("10", "Same scene", "", 0),
+                    self._entry("11", "Scene old source!", "", 0, "local ctx"),
+                    self._entry("12", "Local scene new", "", 0),
+                ],
+            )
+
+            context = build_app_context(project_paths=_FakePaths(root), app_logger=Mock())
+            result = compare_downloaded_paratranz_scope(
+                remote_root=remote_root,
+                scope="main",
+                local_root=local_root,
+                output_root=output_root,
+                context=context,
+            )
+            report_payload = json.loads(result.report_path.read_text(encoding="utf-8"))
+            file_reports = {item["relative_path"]: item for item in report_payload["files"]}
+            scene_source_entries = self._read_entries(output_root / "MainGame" / "delta" / "source_updates" / "scene" / "SceneTitle.json")
+            scene_new_entries = self._read_entries(output_root / "MainGame" / "delta" / "new_entries" / "scene" / "SceneTitle.json")
+            scene_review_entries = self._read_entries(output_root / "MainGame" / "review" / "remote_only" / "scene" / "SceneTitle.json")
+            scene_diff_text = (output_root / "MainGame" / "diff" / "scene" / "SceneTitle.json.diff").read_text(encoding="utf-8")
+
+        self.assertEqual(result.local_mode, "source_text")
+        self.assertEqual(file_reports["scene/SceneTitle.json"]["file_type"], "scene")
+        self.assertEqual(file_reports["scene/SceneTitle.json"]["source_changed"], 1)
+        self.assertEqual(file_reports["scene/SceneTitle.json"]["local_only"], 1)
+        self.assertEqual(file_reports["scene/SceneTitle.json"]["remote_only"], 1)
+        self.assertEqual(set(file_reports["scene/SceneTitle.json"]["delta_paths"]), {"source_updates", "new_entries"})
+        self.assertEqual(set(file_reports["scene/SceneTitle.json"]["review_paths"]), {"remote_only"})
+        self.assertEqual([entry["key"] for entry in scene_source_entries], ["1"])
+        self.assertEqual(scene_source_entries[0]["original"], "Scene old source!")
+        self.assertEqual(scene_source_entries[0]["translation"], "keep scene translation")
+        self.assertEqual(scene_source_entries[0]["stage"], 0)
+        self.assertEqual(scene_source_entries[0]["context"], "local ctx")
+        self.assertEqual([entry["key"] for entry in scene_new_entries], ["3"])
+        self.assertEqual([entry["key"] for entry in scene_review_entries], ["2"])
+        self.assertIn("--- ParaTranz/MainGame/scene/SceneTitle.json", scene_diff_text)
+        self.assertIn("+++ Local/MainGame/scene/SceneTitle.json", scene_diff_text)
+
     def test_compare_downloaded_paratranz_scope_requires_expected_scope_layout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

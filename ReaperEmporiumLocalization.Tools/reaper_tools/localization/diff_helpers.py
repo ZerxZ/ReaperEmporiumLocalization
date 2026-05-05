@@ -14,6 +14,7 @@ MAIN_GAME_DIR = "MainGame"
 DLC_GAME_DIR = "DLCGame"
 DATABASE_DIR = "database"
 DLL_STRINGS_FILE = "dll_strings.json"
+SCENE_DIR = "scene"
 DMP_EQUAL = 0
 DMP_INSERT = 1
 DMP_DELETE = -1
@@ -261,6 +262,7 @@ __all__ = [
     "DatabaseEntryMatcher",
     "DatabaseMatchPair",
     "MAIN_GAME_DIR",
+    "SCENE_DIR",
     "build_database_match_pairs",
     "database_original_for_match",
     "diff_entries_by_patch",

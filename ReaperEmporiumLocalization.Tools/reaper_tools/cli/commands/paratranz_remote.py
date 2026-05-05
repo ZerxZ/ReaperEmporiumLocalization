@@ -6,8 +6,14 @@ import click
 
 from reaper_tools.cli.common import HELP_OPTION_NAMES, LocalizedCommand, get_command_app_context, is_interactive_tty, with_aliases
 from reaper_tools.cli.prompts import confirm_remote_write
-from reaper_tools.cli.registry import MIGRATE_TERMS_COMMAND, UPLOAD_COMPARE_CHANGES_COMMAND, UPLOAD_TRANSLATIONS_COMMAND
+from reaper_tools.cli.registry import (
+    DELETE_FILTERED_FILES_COMMAND,
+    MIGRATE_TERMS_COMMAND,
+    UPLOAD_COMPARE_CHANGES_COMMAND,
+    UPLOAD_TRANSLATIONS_COMMAND,
+)
 from reaper_tools.localization.compare_paratranz import upload_compare_source_changes
+from reaper_tools.localization.paratranz_cleanup import delete_filtered_database_files
 from reaper_tools.localization.paratranz import Paratranz
 
 
@@ -132,6 +138,67 @@ def upload_compare_changes_command(
         context.logger.warning("上传对比变化过程中有 {} 条失败或提示：{}", len(result.errors), " | ".join(result.errors))
     if not execute:
         context.logger.info("默认只预览计划；确认无误后加 --execute 才会真正写入 ParaTranz。")
+    return 0
+
+
+@with_aliases(*DELETE_FILTERED_FILES_COMMAND.aliases)
+@click.command(
+    DELETE_FILTERED_FILES_COMMAND.name,
+    cls=LocalizedCommand,
+    context_settings={"help_option_names": HELP_OPTION_NAMES},
+    help=DELETE_FILTERED_FILES_COMMAND.help,
+    short_help=DELETE_FILTERED_FILES_COMMAND.short_help,
+)
+@click.option("--config-path", type=click.Path(path_type=Path), help="database_dump_filter.json 路径；未传时优先读取游戏根目录配置，找不到则使用内置默认规则。")
+@click.option("--project-id", type=int, help="目标 ParaTranz 项目 ID；未传时默认使用 .env 里的 PARATRANZ_PROJECT_ID。")
+@click.option("--execute", is_flag=True, help="真正执行删除；未传时仅预览会删除哪些远端文件。")
+@click.option("--progress", is_flag=True, help="显示逐文件删除进度。")
+def delete_filtered_files_command(
+    config_path: Path | None,
+    project_id: int | None,
+    execute: bool,
+    progress: bool,
+) -> int:
+    """按数据库导出过滤规则清理 ParaTranz 远端文件。"""
+    context = get_command_app_context()
+    api = Paratranz(context=context)
+    resolved_project_id = project_id or api.project_id
+    _confirm_execute_if_needed(
+        "删除过滤文件",
+        f"目标项目 {resolved_project_id}",
+        execute,
+    )
+    result = delete_filtered_database_files(
+        config_path=config_path,
+        project_id=project_id,
+        dry_run=not execute,
+        show_progress=progress,
+        context=context,
+        api=api,
+    )
+    filter_source = result.filter_config.source_path or "内置默认规则"
+    context.logger.success(
+        "{}删除过滤文件：目标项目 {}，扫描 {} 个远端文件，匹配过滤规则 {} 个，计划删除 {} 个，成功 {} 个，失败 {} 个，跳过 {} 个。规则：{}",
+        "[dry-run] " if not execute else "",
+        resolved_project_id,
+        result.summary.scanned_files,
+        result.summary.matched_files,
+        result.summary.planned_files,
+        result.summary.deleted_files,
+        result.summary.failed_files,
+        result.summary.skipped_files,
+        filter_source,
+    )
+    if result.filter_config.invalid_regex:
+        context.logger.warning("database_dump_filter.json 中有 {} 条无效正则，已忽略：{}", len(result.filter_config.invalid_regex), " | ".join(result.filter_config.invalid_regex))
+    if result.actions:
+        preview = ", ".join(action.remote_name for action in result.actions[:10])
+        suffix = " ..." if len(result.actions) > 10 else ""
+        context.logger.info("匹配到的远端文件：{}{}", preview, suffix)
+    if result.errors:
+        context.logger.warning("删除过滤文件过程中有 {} 条失败或提示：{}", len(result.errors), " | ".join(result.errors))
+    if not execute:
+        context.logger.info("默认只预览计划；确认无误后加 --execute 才会真正删除 ParaTranz 远端文件。")
     return 0
 
 

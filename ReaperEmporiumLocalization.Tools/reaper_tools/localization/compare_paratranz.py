@@ -18,6 +18,7 @@ from .diff_helpers import (
     DLL_STRINGS_FILE,
     DLC_GAME_DIR,
     MAIN_GAME_DIR,
+    SCENE_DIR,
     DatabaseEntryMatcher,
     DatabaseMatchPair,
     build_database_match_pairs,
@@ -160,10 +161,12 @@ class UploadCompareChangesResult:
 class _ScopePackage:
     root: Path
     database_entries_by_relative: dict[Path, list[ParatranzData]]
+    scene_entries_by_relative: dict[Path, list[ParatranzData]]
     dll_entries: list[ParatranzData]
     label: str
     scope_dir: str
     database_key_seed_entries_by_relative: dict[Path, list[ParatranzData]] = field(default_factory=dict)
+    scene_key_seed_entries_by_relative: dict[Path, list[ParatranzData]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -228,9 +231,12 @@ def compare_downloaded_paratranz_scope(
 
     remote_database_files = set(remote_scope_package.database_entries_by_relative)
     local_database_files = set(local_scope_package.database_entries_by_relative)
+    remote_scene_files = set(remote_scope_package.scene_entries_by_relative)
+    local_scene_files = set(local_scope_package.scene_entries_by_relative)
 
     all_database_relatives = sorted(remote_database_files | local_database_files, key=lambda item: item.as_posix().casefold())
-    with ctx.progress(total=len(all_database_relatives) + 1, enabled=show_progress, desc="对比 ParaTranz", unit="文件") as progress:
+    all_scene_relatives = sorted(remote_scene_files | local_scene_files, key=lambda item: item.as_posix().casefold())
+    with ctx.progress(total=len(all_database_relatives) + len(all_scene_relatives) + 1, enabled=show_progress, desc="对比 ParaTranz", unit="文件") as progress:
         for relative in all_database_relatives:
             report = _compare_database_file(
                 remote_entries=remote_scope_package.database_entries_by_relative.get(relative),
@@ -243,6 +249,27 @@ def compare_downloaded_paratranz_scope(
                 review_root=scope_output_root / REVIEW_DIR,
                 diff_root=scope_output_root / DIFF_DIR,
                 key_seed_entries=_database_key_seed_entries(
+                    remote_scope_package,
+                    relative,
+                    scope_dir=scope_dir,
+                ),
+                options=comparison_options,
+            )
+            _record_file_report(result, report)
+            progress.update()
+
+        for relative in all_scene_relatives:
+            report = _compare_scene_file(
+                remote_entries=remote_scope_package.scene_entries_by_relative.get(relative),
+                local_entries=local_scope_package.scene_entries_by_relative.get(relative),
+                relative=Path(SCENE_DIR) / relative,
+                remote_label=remote_scope_package.label,
+                local_label=local_scope_package.label,
+                scope_dir=scope_dir,
+                delta_root=scope_output_root / DELTA_DIR,
+                review_root=scope_output_root / REVIEW_DIR,
+                diff_root=scope_output_root / DIFF_DIR,
+                key_seed_entries=_scene_key_seed_entries(
                     remote_scope_package,
                     relative,
                     scope_dir=scope_dir,
@@ -717,6 +744,110 @@ def _compare_database_file(
     return report
 
 
+def _compare_scene_file(
+    remote_entries: list[ParatranzData] | None,
+    local_entries: list[ParatranzData] | None,
+    *,
+    relative: Path,
+    remote_label: str,
+    local_label: str,
+    scope_dir: str,
+    delta_root: Path,
+    review_root: Path,
+    diff_root: Path,
+    key_seed_entries: list[ParatranzData],
+    options: _ComparisonOptions,
+) -> CompareParatranzFileReport:
+    remote_entries = list(remote_entries or [])
+    local_entries = list(local_entries or [])
+    report = CompareParatranzFileReport(
+        relative_path=relative.as_posix(),
+        file_type="scene",
+        only_in=_only_in_label(remote_entries, local_entries),
+        remote_entries=len(remote_entries),
+        local_entries=len(local_entries),
+    )
+
+    source_update_entries: list[ParatranzData] = []
+    translation_update_entries: list[ParatranzData] = []
+    entry_update_entries: list[ParatranzData] = []
+    new_entries: list[ParatranzData] = []
+    remote_source_diff_entries: list[ParatranzData] = []
+    local_source_diff_entries: list[ParatranzData] = []
+    next_new_key = next_database_key_counter(key_seed_entries)
+
+    if not remote_entries or not local_entries:
+        report.remote_only = len(remote_entries)
+        report.local_only = len(local_entries)
+        for local_entry in local_entries:
+            output_entry, next_new_key = _scene_output_entry(None, local_entry, next_new_key, None, options)
+            new_entries.append(output_entry)
+        _write_report_entries(report.delta_paths, NEW_ENTRIES_DIR, new_entries, delta_root / NEW_ENTRIES_DIR / relative)
+        _write_report_entries(report.review_paths, REMOTE_ONLY_DIR, remote_entries, review_root / REMOTE_ONLY_DIR / relative)
+        return report
+
+    pairs, unmatched_remote_entries = build_database_match_pairs(remote_entries, local_entries)
+    unmatched_local_entries: list[ParatranzData] = []
+    rejected_remote_entries: list[ParatranzData] = []
+    rejected_local_entries: list[ParatranzData] = []
+    for pair in pairs:
+        if pair.base_entry is None:
+            unmatched_local_entries.append(pair.compare_entry)
+            continue
+        classification = _classify_entry_change(pair.base_entry, pair.compare_entry, options=options)
+        if classification is None:
+            continue
+        if not _is_fuzzy_confirmed_source_pair(pair.base_entry, pair.compare_entry, classification):
+            rejected_remote_entries.append(pair.base_entry)
+            rejected_local_entries.append(pair.compare_entry)
+            continue
+        if classification == "source_changed":
+            report.source_changed += 1
+        elif classification == "translation_changed":
+            report.translation_changed += 1
+        elif classification == "entry_changed":
+            report.entry_changed += 1
+        output_entry, next_new_key = _scene_output_entry(
+            pair.base_entry,
+            pair.compare_entry,
+            next_new_key,
+            classification,
+            options,
+        )
+        if classification == "source_changed":
+            source_update_entries.append(output_entry)
+        elif classification == "translation_changed":
+            translation_update_entries.append(output_entry)
+        elif classification == "entry_changed":
+            entry_update_entries.append(output_entry)
+        if classification in {"source_changed", "entry_changed"}:
+            remote_source_diff_entries.append(pair.base_entry)
+            local_source_diff_entries.append(output_entry)
+
+    unmatched_remote_entries.extend(rejected_remote_entries)
+    unmatched_local_entries.extend(rejected_local_entries)
+    report.remote_only = len(unmatched_remote_entries)
+    report.local_only = len(unmatched_local_entries)
+    for local_entry in unmatched_local_entries:
+        output_entry, next_new_key = _scene_output_entry(None, local_entry, next_new_key, None, options)
+        new_entries.append(output_entry)
+
+    _write_report_entries(report.delta_paths, SOURCE_UPDATES_DIR, source_update_entries, delta_root / SOURCE_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, TRANSLATION_UPDATES_DIR, translation_update_entries, delta_root / TRANSLATION_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, ENTRY_UPDATES_DIR, entry_update_entries, delta_root / ENTRY_UPDATES_DIR / relative)
+    _write_report_entries(report.delta_paths, NEW_ENTRIES_DIR, new_entries, delta_root / NEW_ENTRIES_DIR / relative)
+    _write_report_entries(report.review_paths, REMOTE_ONLY_DIR, unmatched_remote_entries, review_root / REMOTE_ONLY_DIR / relative)
+    if report.has_source_diff:
+        report.diff_path = _write_diff_file(
+            remote_source_diff_entries,
+            local_source_diff_entries,
+            diff_root / relative.with_name(f"{relative.name}.diff"),
+            from_label=f"{remote_label}/{scope_dir}/{relative.as_posix()}",
+            to_label=f"{local_label}/{scope_dir}/{relative.as_posix()}",
+        )
+    return report
+
+
 def _compare_dll_file(
     remote_entries: list[ParatranzData],
     local_entries: list[ParatranzData],
@@ -907,6 +1038,16 @@ def _database_output_entry(
     return local_entry.model_copy(update={"key": str(next_new_key)}), next_new_key + 1
 
 
+def _scene_output_entry(
+    remote_entry: ParatranzData | None,
+    local_entry: ParatranzData,
+    next_new_key: int,
+    classification: str | None,
+    options: _ComparisonOptions,
+) -> tuple[ParatranzData, int]:
+    return _database_output_entry(remote_entry, local_entry, next_new_key, classification, options)
+
+
 def _dll_output_entry(
     remote_entry: ParatranzData,
     local_entry: ParatranzData,
@@ -1021,6 +1162,10 @@ def _scope_package_has_no_meaningful_translations(scope_package: _ScopePackage) 
         for entry in entries:
             if _has_meaningful_translation(entry):
                 return False
+    for entries in scope_package.scene_entries_by_relative.values():
+        for entry in entries:
+            if _has_meaningful_translation(entry):
+                return False
     for entry in scope_package.dll_entries:
         if _has_meaningful_translation(entry):
             return False
@@ -1036,6 +1181,17 @@ def _database_key_seed_entries(
     if scope_dir == DLC_GAME_DIR:
         return remote_scope_package.database_key_seed_entries_by_relative.get(relative, [])
     return remote_scope_package.database_entries_by_relative.get(relative, [])
+
+
+def _scene_key_seed_entries(
+    remote_scope_package: _ScopePackage,
+    relative: Path,
+    *,
+    scope_dir: str,
+) -> list[ParatranzData]:
+    if scope_dir == DLC_GAME_DIR:
+        return remote_scope_package.scene_key_seed_entries_by_relative.get(relative, [])
+    return remote_scope_package.scene_entries_by_relative.get(relative, [])
 
 
 def _build_local_scope_package(local_base: Path, scope_dir: str) -> _ScopePackage:
@@ -1064,12 +1220,12 @@ def _build_remote_scope_package(remote_base: Path, scope_dir: str) -> _ScopePack
         main_package, dlc_package = _read_legacy_remote_packages(remote_base)
 
     if scope_dir == MAIN_GAME_DIR:
-        if not main_package.database_entries_by_relative and not main_package.dll_entries:
+        if not main_package.database_entries_by_relative and not main_package.scene_entries_by_relative and not main_package.dll_entries:
             raise FileNotFoundError(f"ParaTranz {MAIN_GAME_DIR} 目录不存在：{remote_base}")
         return main_package
 
     merged_package = _merge_scope_packages(remote_base, main_package, dlc_package, label="ParaTranzMerged")
-    if not merged_package.database_entries_by_relative and not merged_package.dll_entries:
+    if not merged_package.database_entries_by_relative and not merged_package.scene_entries_by_relative and not merged_package.dll_entries:
         raise FileNotFoundError(f"ParaTranz {DLC_GAME_DIR} 可比较基线不存在：{remote_base}")
     return merged_package
 
@@ -1081,19 +1237,28 @@ def _read_standard_scope_package(scope_root: Path, scope_dir: str, *, label: str
         file.relative_to(database_root): read_paratranz_file(file)
         for file in json_files(database_root)
     }
+    scene_root = scope_root / SCENE_DIR
+    scene_entries_by_relative = {
+        file.relative_to(scene_root): read_paratranz_file(file)
+        for file in json_files(scene_root)
+    }
     return _ScopePackage(
         root=scope_root,
         database_entries_by_relative=database_entries_by_relative,
+        scene_entries_by_relative=scene_entries_by_relative,
         dll_entries=read_paratranz_file(scope_root / DLL_STRINGS_FILE),
         label=label,
         scope_dir=scope_dir,
         database_key_seed_entries_by_relative=database_entries_by_relative,
+        scene_key_seed_entries_by_relative=scene_entries_by_relative,
     )
 
 
 def _read_legacy_remote_packages(remote_base: Path) -> tuple[_ScopePackage, _ScopePackage]:
     main_database: dict[Path, list[ParatranzData]] = {}
     dlc_database: dict[Path, list[ParatranzData]] = {}
+    main_scene: dict[Path, list[ParatranzData]] = {}
+    dlc_scene: dict[Path, list[ParatranzData]] = {}
     main_dll_entries: list[ParatranzData] = []
     dlc_dll_entries: list[ParatranzData] = []
 
@@ -1105,11 +1270,15 @@ def _read_legacy_remote_packages(remote_base: Path) -> tuple[_ScopePackage, _Sco
         if logical_path.parts[0] == MAIN_GAME_DIR:
             if logical_path.name == DLL_STRINGS_FILE:
                 main_dll_entries = entries
+            elif len(logical_path.parts) >= 3 and logical_path.parts[1] == SCENE_DIR:
+                main_scene[logical_path.relative_to(Path(MAIN_GAME_DIR) / SCENE_DIR)] = entries
             else:
                 main_database[logical_path.relative_to(Path(MAIN_GAME_DIR) / DATABASE_DIR)] = entries
         elif logical_path.parts[0] == DLC_GAME_DIR:
             if logical_path.name == DLL_STRINGS_FILE:
                 dlc_dll_entries = entries
+            elif len(logical_path.parts) >= 3 and logical_path.parts[1] == SCENE_DIR:
+                dlc_scene[logical_path.relative_to(Path(DLC_GAME_DIR) / SCENE_DIR)] = entries
             else:
                 dlc_database[logical_path.relative_to(Path(DLC_GAME_DIR) / DATABASE_DIR)] = entries
 
@@ -1117,18 +1286,22 @@ def _read_legacy_remote_packages(remote_base: Path) -> tuple[_ScopePackage, _Sco
         _ScopePackage(
             root=remote_base,
             database_entries_by_relative=main_database,
+            scene_entries_by_relative=main_scene,
             dll_entries=main_dll_entries,
             label="ParaTranz",
             scope_dir=MAIN_GAME_DIR,
             database_key_seed_entries_by_relative=main_database,
+            scene_key_seed_entries_by_relative=main_scene,
         ),
         _ScopePackage(
             root=remote_base,
             database_entries_by_relative=dlc_database,
+            scene_entries_by_relative=dlc_scene,
             dll_entries=dlc_dll_entries,
             label="ParaTranz",
             scope_dir=DLC_GAME_DIR,
             database_key_seed_entries_by_relative=dlc_database,
+            scene_key_seed_entries_by_relative=dlc_scene,
         ),
     )
 
@@ -1152,13 +1325,33 @@ def _merge_scope_packages(remote_base: Path, main_package: _ScopePackage, dlc_pa
         )
         for relative in relative_files
     }
+    scene_relative_files = sorted(
+        set(main_package.scene_entries_by_relative) | set(dlc_package.scene_entries_by_relative),
+        key=lambda item: item.as_posix().casefold(),
+    )
+    merged_scene = {
+        relative: _merge_scene_entries(
+            main_package.scene_entries_by_relative.get(relative, []),
+            dlc_package.scene_entries_by_relative.get(relative, []),
+        )
+        for relative in scene_relative_files
+    }
+    key_seed_scene = {
+        relative: (
+            dlc_package.scene_entries_by_relative.get(relative)
+            or main_package.scene_entries_by_relative.get(relative, [])
+        )
+        for relative in scene_relative_files
+    }
     return _ScopePackage(
         root=remote_base,
         database_entries_by_relative=merged_database,
+        scene_entries_by_relative=merged_scene,
         dll_entries=_merge_dll_entries(main_package.dll_entries, dlc_package.dll_entries),
         label=label,
         scope_dir=DLC_GAME_DIR,
         database_key_seed_entries_by_relative=key_seed_database,
+        scene_key_seed_entries_by_relative=key_seed_scene,
     )
 
 
@@ -1166,10 +1359,12 @@ def _empty_scope_package(remote_base: Path, scope_dir: str, *, label: str) -> _S
     return _ScopePackage(
         root=remote_base / scope_dir,
         database_entries_by_relative={},
+        scene_entries_by_relative={},
         dll_entries=[],
         label=label,
         scope_dir=scope_dir,
         database_key_seed_entries_by_relative={},
+        scene_key_seed_entries_by_relative={},
     )
 
 
@@ -1241,6 +1436,8 @@ def _legacy_existing_dump_path(parts: list[str]) -> Path | None:
     if len(parts) >= 3 and parts[1] == DATABASE_DIR:
         clean_parts = [*parts[2:-1], f"{clean_category_name(Path(parts[-1]))}.json"]
         return Path(game_dir) / DATABASE_DIR / Path(*clean_parts)
+    if len(parts) >= 3 and parts[1] == SCENE_DIR:
+        return Path(game_dir) / SCENE_DIR / Path(*parts[2:])
     return None
 
 
@@ -1260,6 +1457,19 @@ def _merge_database_entries(main_entries: list[ParatranzData], dlc_entries: list
         merged.setdefault(entry.runtime_original, entry)
     for entry in dlc_entries:
         merged[entry.runtime_original] = entry
+    return list(merged.values())
+
+
+def _merge_scene_entries(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[ParatranzData]:
+    merged: dict[str, ParatranzData] = {}
+    for entry in main_entries:
+        original = entry.runtime_original
+        if original.strip():
+            merged.setdefault(original, entry)
+    for entry in dlc_entries:
+        original = entry.runtime_original
+        if original.strip():
+            merged[original] = entry
     return list(merged.values())
 
 

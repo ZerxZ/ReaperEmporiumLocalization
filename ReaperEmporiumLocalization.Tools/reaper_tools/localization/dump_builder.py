@@ -12,6 +12,7 @@ from .diff_helpers import (
     DLL_STRINGS_FILE,
     DLC_GAME_DIR,
     MAIN_GAME_DIR,
+    SCENE_DIR,
     DatabaseEntryMatcher as _DatabaseEntryMatcher,
     build_database_match_pairs,
     diff_entries_by_patch as _diff_entries_by_patch,
@@ -37,14 +38,21 @@ class DumpBuildStats:
     main_database_files: int = 0
     main_database_entries: int = 0
     main_dll_entries: int = 0
+    main_scene_files: int = 0
+    main_scene_entries: int = 0
     dlc_database_files_read: int = 0
     dlc_database_files_written: int = 0
     dlc_database_entries_read: int = 0
     dlc_database_entries_written: int = 0
     dlc_dll_entries_read: int = 0
     dlc_dll_entries_written: int = 0
+    dlc_scene_files_read: int = 0
+    dlc_scene_files_written: int = 0
+    dlc_scene_entries_read: int = 0
+    dlc_scene_entries_written: int = 0
     diff_database_files_written: int = 0
     diff_dll_files_written: int = 0
+    diff_scene_files_written: int = 0
 
 
 @dataclass(slots=True)
@@ -89,6 +97,12 @@ def build_dump_diff(*, show_progress: bool = False, context: AppContext | None =
         context=ctx,
     )
     stats.main_dll_entries = _copy_dll_strings(main_source, main_output)
+    stats.main_scene_files, stats.main_scene_entries = _copy_scene_tree(
+        main_source / SCENE_DIR,
+        main_output / SCENE_DIR,
+        show_progress=show_progress,
+        context=ctx,
+    )
 
     stats.dlc_database_files_read, stats.dlc_database_entries_read = _write_dlc_database_diff(
         main_source / DATABASE_DIR,
@@ -105,9 +119,19 @@ def build_dump_diff(*, show_progress: bool = False, context: AppContext | None =
         dlc_output / DLL_STRINGS_FILE,
         diff_output / f"{DLL_STRINGS_FILE}.diff",
     )
+    stats.dlc_scene_files_read, stats.dlc_scene_entries_read = _write_dlc_scene_diff(
+        main_source / SCENE_DIR,
+        dlc_source / SCENE_DIR,
+        dlc_output / SCENE_DIR,
+        diff_output / SCENE_DIR,
+        stats=stats,
+        show_progress=show_progress,
+        context=ctx,
+    )
 
     ctx.logger.info("已构建转储差异到 {}", output_root)
     return stats
+
 
 def _require_dump_package(package_root: Path, name: str) -> None:
     """检查转储包是否包含构建差异所需的目录和文件。"""
@@ -147,6 +171,27 @@ def _copy_database_tree(
     files = _json_files(source_root)
     entry_count = 0
     with context.progress(total=len(files), enabled=show_progress, desc="复制 MainGame 数据库", unit="文件") as progress:
+        for source_file in files:
+            relative = source_file.relative_to(source_root)
+            entries = read_paratranz_file(source_file)
+            entry_count += len(entries)
+            _write_paratranz_file(output_root / relative, entries)
+            progress.set_postfix_str(relative.as_posix())
+            progress.update()
+    return len(files), entry_count
+
+
+def _copy_scene_tree(
+    source_root: Path,
+    output_root: Path,
+    *,
+    show_progress: bool,
+    context: AppContext,
+) -> tuple[int, int]:
+    """完整复制 MainGame scene 树；scene 目录缺失时视为没有场景导出。"""
+    files = _json_files(source_root)
+    entry_count = 0
+    with context.progress(total=len(files), enabled=show_progress, desc="复制 MainGame 场景", unit="文件") as progress:
         for source_file in files:
             relative = source_file.relative_to(source_root)
             entries = read_paratranz_file(source_file)
@@ -229,6 +274,50 @@ def _write_dlc_dll_diff(main_file: Path, dlc_file: Path, output_file: Path, diff
     return len(dlc_entries), len(diff_entries), diff_files_written
 
 
+def _write_dlc_scene_diff(
+    main_scene_root: Path,
+    dlc_scene_root: Path,
+    output_root: Path,
+    diff_output_root: Path,
+    *,
+    stats: DumpBuildStats,
+    show_progress: bool,
+    context: AppContext | None = None,
+) -> tuple[int, int]:
+    """写出 DLC scene 差异文件。
+
+    SceneTextDumper 输出已经是 ParaTranz JSON；这里仅按同 scene 文件内的
+    original 去重，DLC 新增或内容变化的词条才进入 DLCGame/scene。
+    """
+
+    dlc_files = _json_files(dlc_scene_root)
+    read_entries = 0
+    ctx = context or build_app_context(project_paths=paths, app_logger=logger)
+    with ctx.progress(total=len(dlc_files), enabled=show_progress, desc="对比 DLCGame 场景", unit="文件") as progress:
+        for dlc_file in dlc_files:
+            relative = dlc_file.relative_to(dlc_scene_root)
+            dlc_entries = read_paratranz_file(dlc_file)
+            read_entries += len(dlc_entries)
+            main_file = main_scene_root / relative
+            main_entries = read_paratranz_file(main_file) if main_file.exists() else []
+            diff_pairs = _diff_scene_entry_pairs(main_entries, dlc_entries)
+            diff_entries = [pair.output_entry for pair in diff_pairs]
+            if diff_entries:
+                _write_paratranz_file(output_root / relative, diff_entries)
+                if _write_readable_scene_diff(
+                    diff_pairs,
+                    _diff_file_path(diff_output_root, relative),
+                    f"{MAIN_GAME_DIR}/{SCENE_DIR}/{relative.as_posix()}",
+                    f"{DLC_GAME_DIR}/{SCENE_DIR}/{relative.as_posix()}",
+                ):
+                    stats.diff_scene_files_written += 1
+                stats.dlc_scene_files_written += 1
+                stats.dlc_scene_entries_written += len(diff_entries)
+            progress.set_postfix_str(relative.as_posix())
+            progress.update()
+    return len(dlc_files), read_entries
+
+
 def _diff_file_path(root: Path, relative: Path) -> Path:
     """把原始 JSON 相对路径映射为 diff 输出路径，例如 db.json -> db.json.diff。"""
     return root / relative.with_name(f"{relative.name}.diff")
@@ -272,6 +361,20 @@ def _write_readable_database_diff(diff_pairs: list[_EntryDiff], target_file: Pat
     return True
 
 
+def _write_readable_scene_diff(diff_pairs: list[_EntryDiff], target_file: Path, from_label: str, to_label: str) -> bool:
+    """按 scene 的 original 匹配结果写出差异，避免完整场景数组重排。"""
+    main_entries = [pair.main_entry for pair in diff_pairs if pair.main_entry is not None]
+    dlc_entries = [pair.output_entry for pair in diff_pairs]
+    main_text = _normalized_paratranz_json_text(main_entries)
+    dlc_text = _normalized_paratranz_json_text(dlc_entries)
+    diff_text = _format_readable_json_diff(main_text, dlc_text, from_label, to_label)
+    if not diff_text:
+        return False
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_text(diff_text, encoding="utf-8", newline="\n")
+    return True
+
+
 def _database_output_entry(pair: _EntryDiff, next_new_key: int) -> tuple[ParatranzData, int]:
     """已匹配词条改用 MainGame key；新增 DLC 词条按 MainGame 文件 key 顺序继续编号。"""
     if pair.main_entry is not None:
@@ -296,6 +399,17 @@ def _diff_entry_pairs(main_entries: list[ParatranzData], dlc_entries: list[Parat
             pending_pair = _EntryDiff(candidate, dlc_entry, dlc_entry)
             output_entry, next_new_key = _database_output_entry(pending_pair, next_new_key)
             changed_pairs.append(_EntryDiff(candidate, dlc_entry, output_entry))
+    return changed_pairs
+
+
+def _diff_scene_entry_pairs(main_entries: list[ParatranzData], dlc_entries: list[ParatranzData]) -> list[_EntryDiff]:
+    """计算 scene 差异；scene 只以 original 为身份，忽略 key 漂移。"""
+    main_by_original = {entry.runtime_original: entry for entry in main_entries if entry.runtime_original.strip()}
+    changed_pairs: list[_EntryDiff] = []
+    for dlc_entry in dlc_entries:
+        candidate = main_by_original.get(dlc_entry.runtime_original)
+        if candidate is None or _entries_differ_by_patch(candidate, dlc_entry, ignore_key=True):
+            changed_pairs.append(_EntryDiff(candidate, dlc_entry, dlc_entry))
     return changed_pairs
 
 
