@@ -78,6 +78,22 @@ namespace ReaperEmporiumLocalization.Core
             }
         }
 
+        public static void EnsureDefaultFilterConfig()
+        {
+            string configPath = GetFilterConfigPath();
+            lock (FilterLock)
+            {
+                try
+                {
+                    EnsureFilterConfigFile(configPath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[REL.Dumper] 生成 database_dump_filter.json 默认配置失败：{ex.Message}");
+                }
+            }
+        }
+
         private static bool ShouldSkipAsset(string assetName)
         {
             if (string.IsNullOrEmpty(assetName))

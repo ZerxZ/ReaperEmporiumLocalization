@@ -23,6 +23,7 @@ namespace ReaperEmporiumLocalization
         private void Awake()
         {
             LocalizationConfig.Init();
+            DatabaseDumper.EnsureDefaultFilterConfig();
 
             Logger.LogInfo("[REL] ======= 启动本地化引擎 =======");
 
