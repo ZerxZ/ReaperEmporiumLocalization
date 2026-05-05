@@ -1,0 +1,12 @@
+[
+  {
+    "target_fonts": [
+      "TT_Yuruka-UB",
+      "FOT-KurokaneStd-EB"
+    ],
+    "font_style": "Normal",
+    "source_mode": "bundle_asset",
+    "source_file": "NotoSansSC-ExtraBold.bundle",
+    "source_font": "NotoSansSC-ExtraBold"
+  }
+]

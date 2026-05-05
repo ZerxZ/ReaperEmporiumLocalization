@@ -1,0 +1,40 @@
+{
+  "runtimeTarget": {
+    "name": ".NETStandard,Version=v2.1/",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETStandard,Version=v2.1": {},
+    ".NETStandard,Version=v2.1/": {
+      "ReaperEmporiumLocalization.Preload/1.0.0": {
+        "dependencies": {
+          "ReaperEmporiumLocalization.Shared": "1.0.0"
+        },
+        "runtime": {
+          "ReaperEmporiumLocalization.Preload.dll": {}
+        }
+      },
+      "ReaperEmporiumLocalization.Shared/1.0.0": {
+        "runtime": {
+          "ReaperEmporiumLocalization.Shared.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "ReaperEmporiumLocalization.Preload/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ReaperEmporiumLocalization.Shared/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

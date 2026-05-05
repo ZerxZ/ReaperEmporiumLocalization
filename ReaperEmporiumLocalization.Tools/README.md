@@ -318,7 +318,7 @@ reaper-tools 上传翻译 --project-id 新项目ID --execute --progress
 
 ## 最终打包
 
-`最终打包` 默认读取 `build/migrated`，把 `MainGame` 与 `DLCGame` 合并为游戏插件运行时需要的 `localization` 结构，并同时生成 zip：
+`最终打包` 默认优先读取 `build/migrated`，如果迁移产物不存在或不完整，会自动回退到刚下载的 ParaTranz 导出目录 `data/paratranz/utf8`，把 `MainGame` 与 `DLCGame` 合并为游戏插件运行时需要的 `localization` 结构，并同时生成 zip：
 
 ```text
 build/package/
@@ -328,19 +328,25 @@ build/package/
   ReaperEmporiumLocalization-localization.zip
 ```
 
-推荐流程是先执行 `构建差异`，需要套用旧 ParaTranz 译文时再执行 `迁移翻译`，最后执行：
+推荐流程可以是先执行 `下载包`，再直接执行：
 
 ```powershell
+reaper-tools 下载包 --force --progress
 reaper-tools 最终打包 --progress
 ```
 
-合并时，同一路径数据库 JSON 会按 `original` 去重：先放入 `MainGame` 词条，`DLCGame` 同原文词条覆盖本体译文，DLC 新原文追加。DLL 会合并成单个 `localization/dll_strings/dll_strings.json`，同原文优先使用 DLC，再按 `stage/translation` 质量择优。zip 内只包含 `localization/` 目录，可直接解压到游戏根目录。
+如果你正在做迁移流程，也可以先执行 `构建差异`，需要套用旧 ParaTranz 译文时再执行 `迁移翻译`，最后同样执行 `最终打包`；此时默认会使用 `build/migrated`。
+
+合并时，同一路径数据库 JSON 会按 `original` 去重：先放入 `MainGame` 词条，`DLCGame` 同原文词条覆盖本体译文，DLC 新原文追加。DLL 会合并成单个 `localization/dll_strings/dll_strings.json`，同原文优先使用 DLC，再按 `stage/translation` 质量择优。zip 内包含 `localization/` 目录和根目录 `DISCLAIMER.txt`，可直接解压到游戏根目录。
 
 如果想跳过迁移，直接使用当前差异构建产物，也可以指定：
 
 ```powershell
 reaper-tools 最终打包 --source-root build/dump --progress
 ```
+
+这里生成的 `ReaperEmporiumLocalization-localization.zip` 是 localization-only 包，主体只包含 `localization/`，同时附带根目录 `DISCLAIMER.txt`。仓库正式发布使用根目录 `.github/workflows/runner.yml` 再把它解压覆盖进 `ReaperEmporium.GameRoot` staging，并与 Release 构建后的 `BepInEx/plugins`、`BepInEx/patchers` 一起组合成可直接解压到游戏根目录的整合发布包。
+
 ## 内部结构
 
 这一节面向维护者，说明当前项目里哪些部分属于稳定 CLI 契约，哪些只是内部实现。

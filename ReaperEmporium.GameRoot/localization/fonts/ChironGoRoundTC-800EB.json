@@ -1,0 +1,11 @@
+[
+  {
+    "target_fonts": [
+      "FOT-NewRodinPro-EB"
+    ],
+    "font_style": "Normal",
+    "source_mode": "bundle_asset",
+    "source_file": "ChironGoRoundTC-800EB.bundle",
+    "source_font": "ChironGoRoundTC-800EB"
+  }
+]

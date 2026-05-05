@@ -110,7 +110,7 @@ PACKAGE_FINAL_COMMAND = CommandMetadata(
     key="package_final",
     name="最终打包",
     aliases=("package-final",),
-    help="把 MainGame/DLCGame 合并为运行时 localization 目录，并生成发布 zip。",
+    help="把 MainGame/DLCGame 合并为运行时 localization 目录，并生成发布 zip；默认优先 build/migrated，缺失时回退到 data/paratranz/utf8。",
     short_help="合并 MainGame/DLCGame 并生成最终包。",
 )
 

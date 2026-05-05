@@ -1,0 +1,12 @@
+[
+  {
+    "target_fonts": [
+      "FOT-COMICREGGAESTD-B",
+      "FOT-HummingStd-B"
+    ],
+    "font_style": "Normal",
+    "source_mode": "bundle_asset",
+    "source_file": "NotoSansSC-Bold.bundle",
+    "source_font": "NotoSansSC-Bold"
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "target_fonts": [
+      "FOT-NewRodinPro-M"
+    ],
+    "font_style": "Normal",
+    "source_mode": "bundle_asset",
+    "source_file": "ChironGoRoundTC-500M.bundle",
+    "source_font": "ChironGoRoundTC-500M"
+  }
+]

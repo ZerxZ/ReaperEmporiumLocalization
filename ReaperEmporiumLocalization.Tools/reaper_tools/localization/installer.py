@@ -14,6 +14,19 @@ from reaper_tools.models import ParatranzData, paratranz_data_list_adapter
 
 _CAB_SUFFIX_PATTERN = re.compile(r"-CAB-.*$")
 _NUMBER_SUFFIX_PATTERN = re.compile(r"_\d+$")
+_DISCLAIMER_FILE_NAME = "DISCLAIMER.txt"
+_DEFAULT_DISCLAIMER_TEXT = """免责声明
+
+1. 本项目仅提供《死神商館RExEX》的本地化插件源码、构建产物、翻译维护工具和相关说明。
+2. 本项目不提供游戏本体、商业素材、原始受版权保护文本或任何可替代正版购买的内容。
+3. 使用者必须在合法拥有游戏本体的前提下使用本项目发布的补丁或自行构建的产物。
+4. 请支持正版游戏；如果你喜欢本作品，请通过 DLsite 等官方渠道购买正版：https://www.dlsite.com/maniax/work/=/product_id/RJ01007980.html
+5. 任何学习、研究或测试用途的文件都不应长期保留；如果你通过非官方渠道获得了包含游戏本体或商业资源的内容，请在 24 小时内删除，并购买正版。
+6. 游戏作品相关权利、官方说明和最终解释权归游戏作者 サークル冥魅亭 (Circle Meimitei) 所有，请以作者官方页面为准：https://ci-en.dlsite.com/creator/65
+7. 本项目与游戏作者、发行平台、BepInEx、ParaTranz 等第三方没有商业从属关系。
+8. 第三方整合包、转载包、修改版或与其他插件混用导致的问题与风险，由使用者自行承担。
+9. 官方 Discord 主要适合日语交流；中文补丁问题请优先通过本仓库 GitHub issue 反馈。
+"""
 
 
 @dataclass(slots=True)
@@ -131,13 +144,15 @@ def package_final_localization(
 ) -> PackageStats:
     """把 MainGame/DLCGame 翻译包合并成游戏运行时 localization 目录。
 
-    默认输入为 build/migrated；如果不需要旧译文迁移，也可以把 source_root 指向
-    build/dump。输出目录本身就是 localization 目录，zip 内部固定使用
-    localization/ 前缀，方便直接解压到游戏根目录。
+    默认优先输入 build/migrated；如果没有迁移产物，会自动回退到
+    data/paratranz/utf8 或 data/paratranz，方便下载 ParaTranz 导出后直接打包。
+    如果不需要旧译文迁移，也可以把 source_root 显式指向 build/dump。
+    输出目录本身就是 localization 目录，zip 内部固定使用 localization/ 前缀，
+    方便直接解压到游戏根目录。
     """
 
     ctx = context or build_app_context(project_paths=paths, app_logger=logger)
-    source = Path(source_root) if source_root is not None else ctx.paths.root / "build" / "migrated"
+    source = _resolve_package_source(source_root, ctx)
     output = Path(output_root) if output_root is not None else ctx.paths.root / "build" / "package" / "localization"
     archive = (
         Path(zip_path)
@@ -172,12 +187,35 @@ def package_final_localization(
     if stats.dll_entries:
         stats.written_files += 1
 
+    disclaimer_text = _load_disclaimer_text(ctx.paths.root)
+    _write_disclaimer_file(archive.parent / _DISCLAIMER_FILE_NAME, disclaimer_text)
+
     if create_zip:
-        _write_localization_zip(output, archive)
+        _write_localization_zip(output, archive, disclaimer_text=disclaimer_text)
         stats.zip_path = archive
 
     ctx.logger.info("已生成最终本地化包：{}", output)
     return stats
+
+
+def _resolve_package_source(source_root: Path | str | None, context: AppContext) -> Path:
+    if source_root is not None:
+        return Path(source_root)
+
+    migrated_root = context.paths.root / "build" / "migrated"
+    if _is_final_package_source(migrated_root):
+        return migrated_root
+
+    for fallback in (context.paths.paratranz / "utf8", context.paths.paratranz):
+        if _is_final_package_source(fallback):
+            context.logger.info("默认打包源 {} 不存在或不完整，改用 ParaTranz 导出：{}", migrated_root, fallback)
+            return fallback
+
+    return migrated_root
+
+
+def _is_final_package_source(root: Path) -> bool:
+    return (root / "MainGame").is_dir() and (root / "DLCGame").is_dir()
 
 
 def discover_translation_packages(input_roots: Iterable[Path | str]) -> list[Path]:
@@ -377,13 +415,27 @@ def _reset_output_dir(output: Path, *, context: AppContext) -> None:
     output.mkdir(parents=True, exist_ok=True)
 
 
-def _write_localization_zip(localization_root: Path, zip_path: Path) -> None:
-    """写出只包含 localization/ 前缀的 zip。"""
+def _load_disclaimer_text(project_root: Path) -> str:
+    """读取仓库免责声明；测试或独立运行时缺失则使用内置文本。"""
+    for candidate in (project_root / _DISCLAIMER_FILE_NAME, project_root.parent / _DISCLAIMER_FILE_NAME):
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8-sig").strip() + "\n"
+    return _DEFAULT_DISCLAIMER_TEXT
+
+
+def _write_disclaimer_file(target: Path, disclaimer_text: str) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(disclaimer_text, encoding="utf-8", newline="\n")
+
+
+def _write_localization_zip(localization_root: Path, zip_path: Path, *, disclaimer_text: str) -> None:
+    """写出 localization/ 和根目录免责声明文件。"""
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     if zip_path.exists():
         zip_path.unlink()
     files = sorted(localization_root.rglob("*"), key=lambda item: item.relative_to(localization_root).as_posix().casefold())
     with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(_DISCLAIMER_FILE_NAME, disclaimer_text)
         for file_path in files:
             if file_path.is_file():
                 archive_name = (Path("localization") / file_path.relative_to(localization_root)).as_posix()
@@ -419,4 +471,3 @@ __all__ = [
 _DEFAULT_CONTEXT = get_app_context()
 paths = _DEFAULT_CONTEXT.paths
 logger = _DEFAULT_CONTEXT.logger
-

@@ -1,0 +1,5 @@
+<Project>
+    <PropertyGroup>
+        <GameFolder>$(MSBuildThisFileDirectory)ReaperEmporium.GameRoot</GameFolder>
+    </PropertyGroup>
+</Project>

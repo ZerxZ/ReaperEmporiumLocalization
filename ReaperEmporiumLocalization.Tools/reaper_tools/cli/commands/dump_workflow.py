@@ -174,7 +174,7 @@ def migrate_translations_command(
     help=PACKAGE_FINAL_COMMAND.help,
     short_help=PACKAGE_FINAL_COMMAND.short_help,
 )
-@click.option("--source-root", type=click.Path(path_type=Path), help="包含 MainGame/DLCGame 的目录；未传时默认使用 build/migrated。")
+@click.option("--source-root", type=click.Path(path_type=Path), help="包含 MainGame/DLCGame 的目录；未传时默认使用 build/migrated，不存在则回退到 data/paratranz/utf8。")
 @click.option("--output-root", type=click.Path(path_type=Path), help="输出 localization 目录；未传时默认使用 build/package/localization。")
 @click.option(
     "--zip-path",

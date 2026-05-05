@@ -1,0 +1,253 @@
+[Message:   BepInEx] BepInEx 5.4.23.5 - 死神商館RExEX (2026/3/1 6:20:06)
+[Info   :   BepInEx] Running under Unity v6000.3.10.14901004
+[Info   :   BepInEx] CLR runtime version: 4.0.30319.42000
+[Info   :   BepInEx] Supports SRE: True
+[Info   :   BepInEx] System platform: Bits64, Windows
+[Message:   BepInEx] Preloader started
+[Info   :   BepInEx] Loaded 1 patcher method from [BepInEx.Preloader 5.4.23.5]
+[Info   :   BepInEx] Loaded 1 patcher method from [ReaperEmporiumLocalization.Preload 1.0.0.0]
+[Info   :   BepInEx] 2 patcher plugins loaded
+[Info   :   BepInEx] Patching [UnityEngine.CoreModule] with [BepInEx.Chainloader]
+[Info   :   BepInEx] Patching [Assembly-CSharp] with [ReaperEmporiumLocalization.Preload.Patcher]
+[Message:   BepInEx] Preloader finished
+[Message:   BepInEx] Chainloader ready
+[Message:   BepInEx] Chainloader started
+[Info   :   BepInEx] 2 plugins to load
+[Info   :   BepInEx] Loading [Reaper Emporium Localization 1.0.0]
+[Info   :Reaper Emporium Localization] [REL] ======= 启动本地化引擎 =======
+[Info   :Reaper Emporium Localization] [REL] [阶段 1/2] 正在读取 localization/database 下的翻译...
+[Info   :Reaper Emporium Localization] [REL] [阶段 1/2] 完成，已加载 152969 条数据库翻译。
+[Info   :Reaper Emporium Localization] [REL] [阶段 2/2] 正在挂载运行时补丁...
+[Info   : REL.Fonts] [REL] 扫描字体目录：D:\Game\死神商館RExEX(製品版ver1.2.00a)\localization\fonts
+[Info   : REL.Fonts] [REL] 发现字体来源：ChironGoRoundTC-500M.bundle -> ChironGoRoundTC-500M
+[Info   : REL.Fonts] [REL] 发现字体来源：ChironGoRoundTC-700B.bundle -> ChironGoRoundTC-700B
+[Info   : REL.Fonts] [REL] 发现字体来源：ChironGoRoundTC-800EB.bundle -> ChironGoRoundTC-800EB
+[Info   : REL.Fonts] [REL] 发现字体来源：NotoSansSC-Bold.bundle -> NotoSansSC-Bold
+[Info   : REL.Fonts] [REL] 发现字体来源：NotoSansSC-ExtraBold.bundle -> NotoSansSC-ExtraBold
+[Info   : REL.Fonts] [REL] 当前未检测到 UI.Text 使用中的字体，自动生成 json 时将继续使用占位 target_fonts。
+[Info   : REL.Fonts] [REL] 字体来源 ChironGoRoundTC-500M 已存在规则文件：ChironGoRoundTC-500M.json
+[Info   : REL.Fonts] [REL] 字体来源 ChironGoRoundTC-700B 已存在规则文件：ChironGoRoundTC-700B.json
+[Info   : REL.Fonts] [REL] 字体来源 ChironGoRoundTC-800EB 已存在规则文件：ChironGoRoundTC-800EB.json
+[Info   : REL.Fonts] [REL] 字体来源 NotoSansSC-Bold 已存在规则文件：NotoSansSC-Bold.json
+[Info   : REL.Fonts] [REL] 字体来源 NotoSansSC-ExtraBold 已存在规则文件：NotoSansSC-ExtraBold.json
+[Info   : REL.Fonts] [REL] 从字体包 ChironGoRoundTC-500M.bundle 的 1 个字体中命中 source_font=ChironGoRoundTC-500M。
+[Info   : REL.Fonts] [REL] bundle_asset 加载成功：ChironGoRoundTC-500M.bundle -> ChironGoRoundTC-500M
+[Info   : REL.Fonts] [REL] 已加载字体规则 ChironGoRoundTC-500M.json，新增 1 条规则。
+[Info   : REL.Fonts] [REL] 从字体包 ChironGoRoundTC-700B.bundle 的 1 个字体中命中 source_font=ChironGoRoundTC-700B。
+[Info   : REL.Fonts] [REL] bundle_asset 加载成功：ChironGoRoundTC-700B.bundle -> ChironGoRoundTC-700B
+[Info   : REL.Fonts] [REL] 已加载字体规则 ChironGoRoundTC-700B.json，新增 1 条规则。
+[Info   : REL.Fonts] [REL] 从字体包 ChironGoRoundTC-800EB.bundle 的 1 个字体中命中 source_font=ChironGoRoundTC-800EB。
+[Info   : REL.Fonts] [REL] bundle_asset 加载成功：ChironGoRoundTC-800EB.bundle -> ChironGoRoundTC-800EB
+[Info   : REL.Fonts] [REL] 已加载字体规则 ChironGoRoundTC-800EB.json，新增 1 条规则。
+[Info   : REL.Fonts] [REL] 从字体包 NotoSansSC-Bold.bundle 的 1 个字体中命中 source_font=NotoSansSC-Bold。
+[Info   : REL.Fonts] [REL] bundle_asset 加载成功：NotoSansSC-Bold.bundle -> NotoSansSC-Bold
+[Info   : REL.Fonts] [REL] 已加载字体规则 NotoSansSC-Bold.json，新增 2 条规则。
+[Info   : REL.Fonts] [REL] 从字体包 NotoSansSC-ExtraBold.bundle 的 1 个字体中命中 source_font=NotoSansSC-ExtraBold。
+[Info   : REL.Fonts] [REL] bundle_asset 加载成功：NotoSansSC-ExtraBold.bundle -> NotoSansSC-ExtraBold
+[Info   : REL.Fonts] [REL] 已加载字体规则 NotoSansSC-ExtraBold.json，新增 2 条规则。
+[Info   : REL.Fonts] [REL] 字体规则加载完成：发现 5 个字体来源，自动生成 0 个 json，加载 5 个规则文件，共 7 条规则。来源统计：bundle_asset=5，font_path accepted=0，font_path -> os_dynamic fallback=0，os_dynamic=0。
+[Info   :Reaper Emporium Localization] [REL] 字体规则初始化完成：发现 5 个字体来源，自动生成 0 个 json，加载 5 个规则文件，共 7 条规则。
+[Info   :Reaper Emporium Localization] [REL] 已挂载 UguiNovelText.Awake 运行时补丁。
+[Info   :Reaper Emporium Localization] [REL] 已注册场景加载后的场景文本/字体处理流程。
+[Info   :Reaper Emporium Localization] [REL] ======= 本地化引擎已全部就绪 =======
+[Info   :   BepInEx] Loading [Ignore Specific Log 1.0.0]
+[Info   :Ignore Specific Log] 日志过滤插件已加载！
+[Message:   BepInEx] Chainloader startup complete
+[Info   :REL.FontHook] [REL] Awake 检测到本体字体：对象=MessageDescription，字体=FOT-NewRodinPro-B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageDescription，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 检测到本体字体：对象=MessageEventName，字体=TT_Yuruka-UB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageEventName，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageTitle，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageComplete，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 检测到本体字体：对象=Title，字体=FOT-NewRodinPro-EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageDescription，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 检测到本体字体：对象=TitlePage，字体=FOT-KurokaneStd-EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=TitlePage，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageChara，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageH，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=FinishCountValue，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=DayTani，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=TxtPlaceName，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageMouseRight，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageCharaH，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Value，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageNtrSkip，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageDungeonRight，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageShopName，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageCharaName，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageChara，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageMidoku，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageAvatar，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageFinishCount，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageSkipPiston，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageVoiceBgm，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageCharaNamePL，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MultiTextBox (1)，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Description，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=TxtGameOver，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageStaffCircle，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageStaffName，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageStaffRole，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=MessageTotalTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=No，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Time，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=RealTime，当前字体=ChironGoRoundTC-800EB，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Memo，当前字体=ChironGoRoundTC-700B，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Infomation，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Message，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :REL.FontHook] [REL] Awake 字体替换：对象=Title，当前字体=NotoSansSC-ExtraBold，样式=Normal
+[Info   :Reaper Emporium Localization] [REL] 场景加载完成，准备延迟处理：SceneTitle (2)

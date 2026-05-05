@@ -46,6 +46,7 @@
 - [翻译工具与差异构建](#翻译工具与差异构建)
 - [源代码结构](#源代码结构)
 - [构建](#构建)
+- [发布与反馈](#发布与反馈)
 - [排错建议](#排错建议)
 - [免责声明](#免责声明)
 - [参考与致谢](#参考与致谢)
@@ -437,7 +438,7 @@ IgnoreSpecificLog/
 
 - Windows
 - 已安装游戏本体
-- 已为游戏安装 BepInEx
+- 已为游戏安装 BepInEx；当前参考版本为 `v5.4.23.5`，可在 [BepInEx Releases][bepinex-releases] 查看
 - .NET SDK 6.0 或更高版本
 
 项目默认假设仓库位于：
@@ -471,6 +472,47 @@ dotnet build ReaperEmporiumLocalization.sln -c Release
 
 ---
 
+## 发布与反馈
+
+GitHub Actions 使用 `.github/workflows/runner.yml` 生成最终发布包。该 workflow 会在手动触发、每周定时和 `v*` tag push 时运行：
+
+1. 校验 `ReaperEmporiumLocalization.Tools`
+2. 用 `GameFolder.github.props` 覆盖 CI 环境里的 `GameFolder.props`
+3. 执行 `dotnet build ReaperEmporiumLocalization.sln -c Release`
+4. 下载 ParaTranz 导出并执行 `reaper-tools 最终打包`
+5. 以 `ReaperEmporium.GameRoot` 为基础组合整合 zip
+6. 上传 artifact，并在 release job 中发布
+
+`GameFolder.props` 只用于本地开发；CI 专用配置是 `GameFolder.github.props`，其 `GameFolder` 指向仓库内的 `ReaperEmporium.GameRoot`。这个目录是发布用游戏根目录壳，需要包含 BepInEx、Doorstop 文件和编译引用所需的 `死神商館RExEX_Data/Managed`。其中 `死神商館RExEX_Data` 主要用于构建 DLL 引用，不保证是最新游戏版本数据，也不会进入最终 zip。
+
+当前发布壳里的 BepInEx 参考版本为 `v5.4.23.5`；如需更新或核对版本，请查看 [BepInEx Releases][bepinex-releases]。
+
+最终发布的 zip 设计为直接解压到游戏根目录，根目录应包含：
+
+- `BepInEx/`
+- `localization/`
+- `.doorstop_version`
+- `doorstop_config.ini`
+- `winhttp.dll`
+- `changelog.txt`
+- `DISCLAIMER.txt`
+
+最终发布 zip 会排除：
+
+- `死神商館RExEX_Data/`
+- `BepInEx/cache/`
+- `BepInEx/LogOutput.log`
+- 其他 `*.log`
+
+ParaTranz 下载需要在仓库 secrets 中配置：
+
+- `PARATRANZ_TOKEN`
+- `PARATRANZ_PROJECT_ID`
+
+如果遇到中文补丁问题，请优先使用 GitHub issue，并按 bug report 模板附上游戏版本、补丁版本、截图和 `BepInEx/LogOutput.log`。作者官方 Discord 主要适合日语交流，中文问题请优先在本仓库提交。
+
+---
+
 ## 排错建议
 
 ### 修改翻译后无效
@@ -495,8 +537,13 @@ dotnet build ReaperEmporiumLocalization.sln -c Release
 
 1. 本仓库仅提供本地化插件源码、构建产物与相关说明，不提供游戏本体、商业资源或原始受版权保护文本。
 2. 请先通过 [DLsite 作品页][game-dlsite] 合法获取游戏本体。
-3. 本项目仅供学习、交流和本地化研究使用。
-4. 第三方整合包、转载包、修改版带来的风险由使用者自行承担。
+3. 请支持正版游戏；如果你喜欢本作品，请通过 [DLsite 作品页][game-dlsite] 等官方渠道购买正版。
+4. 本项目仅供学习、交流和本地化研究使用。
+5. 任何学习、研究或测试用途的文件都不应长期保留；如果你通过非官方渠道获得了包含游戏本体或商业资源的内容，请在 24 小时内删除，并购买正版。
+6. 游戏作品相关权利、官方说明和最终解释权归游戏作者 サークル冥魅亭 (Circle Meimitei) 所有，请以 [Ci-en 创作者页面][author] 为准。
+7. 第三方整合包、转载包、修改版带来的风险由使用者自行承担。
+
+发布包根目录会附带 `DISCLAIMER.txt`，内容与本节一致，方便使用者在离线分发包中直接查看。
 
 ---
 
@@ -522,3 +569,4 @@ MIT
 [releases-latest]: https://github.com/ZerxZ/ReaperEmporiumLocalization/releases/latest
 [issues]: https://github.com/ZerxZ/ReaperEmporiumLocalization/issues
 [github-pop]: https://github.com/CKRainbow/PoPLocalization
+[bepinex-releases]: https://github.com/BepInEx/BepInEx/releases
