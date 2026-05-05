@@ -24,6 +24,7 @@
 - 作者主页：[Ci-en 创作者页面][author]
 - 游戏本体：[DLsite 作品页][game-dlsite]
 - 官方 Discord：[Discord][discord]（作者官方服务器，交流以日语为主）
+- 开发说明：本项目代码全程由 ChatGPT（OpenAI）和 Gemini（Google）生成与维护，0 手工编写
 
 - 不包含游戏本体、商业素材或原始受版权保护文本
 - 请在合法拥有游戏的前提下使用
