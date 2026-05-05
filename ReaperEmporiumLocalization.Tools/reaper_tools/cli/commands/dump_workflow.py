@@ -88,20 +88,35 @@ def compare_paratranz_command(
         show_progress=progress,
         context=context,
     )
-    context.logger.success(
-        "已完成 ParaTranz 对比：{}，扫描 {} 个文件，远端独有文件 {} 个 / 词条 {} 条，本地独有文件 {} 个 / 词条 {} 条，"
-        "原文变化 {} 条，译文变化 {} 条，整体变化 {} 条。报告：{}",
-        result.scope_dir,
-        result.summary.scanned_files,
-        result.summary.remote_only_files,
-        result.summary.remote_only_entries,
-        result.summary.local_only_files,
-        result.summary.local_only_entries,
-        result.summary.source_changed_entries,
-        result.summary.translation_changed_entries,
-        result.summary.entry_changed_entries,
-        result.report_path,
-    )
+    local_mode = getattr(result, "local_mode", "translation_package")
+    if local_mode == "source_text":
+        context.logger.success(
+            "已完成 ParaTranz 对比（源文本模式）：{}，扫描 {} 个文件，远端独有文件 {} 个 / 词条 {} 条，本地独有文件 {} 个 / 词条 {} 条，"
+            "原文变化 {} 条，译文变化已忽略。报告：{}",
+            result.scope_dir,
+            result.summary.scanned_files,
+            result.summary.remote_only_files,
+            result.summary.remote_only_entries,
+            result.summary.local_only_files,
+            result.summary.local_only_entries,
+            result.summary.source_changed_entries,
+            result.report_path,
+        )
+    else:
+        context.logger.success(
+            "已完成 ParaTranz 对比：{}，扫描 {} 个文件，远端独有文件 {} 个 / 词条 {} 条，本地独有文件 {} 个 / 词条 {} 条，"
+            "原文变化 {} 条，译文变化 {} 条，原文和译文同时变化 {} 条。报告：{}",
+            result.scope_dir,
+            result.summary.scanned_files,
+            result.summary.remote_only_files,
+            result.summary.remote_only_entries,
+            result.summary.local_only_files,
+            result.summary.local_only_entries,
+            result.summary.source_changed_entries,
+            result.summary.translation_changed_entries,
+            result.summary.entry_changed_entries,
+            result.report_path,
+        )
     return 0
 
 
