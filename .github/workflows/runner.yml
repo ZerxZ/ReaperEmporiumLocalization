@@ -10,11 +10,6 @@ on:
 
 permissions: write-all
 
-env:
-  PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
-  PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
-  RELEASE_BASENAME: ReaperEmporiumLocalization
-
 jobs:
   get-version:
     name: Get Version
@@ -112,6 +107,9 @@ jobs:
 
       - name: Download ParaTranz export
         working-directory: ReaperEmporiumLocalization.Tools
+        env:
+          PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
+          PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
         run: uv run reaper-tools 下载包 --force --progress
 
       - name: Build localization package
@@ -208,7 +206,7 @@ jobs:
           }
 
       - name: Upload integrated release artifact
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: integrated-release
           path: ${{ steps.compose.outputs.archive }}

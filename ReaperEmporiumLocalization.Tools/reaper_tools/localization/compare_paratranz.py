@@ -207,7 +207,7 @@ def compare_downloaded_paratranz_scope(
     ctx = context or build_app_context(project_paths=paths, app_logger=logger)
     scope_dir = _resolve_scope_dir(scope)
     remote_base = Path(remote_root).resolve()
-    local_base = (Path(local_root) if local_root is not None else ctx.paths.root / "build" / "dump").resolve()
+    local_base = Path(local_root) if local_root is not None else ctx.paths.root / "build" / "dump"
     output_base = (Path(output_root) if output_root is not None else ctx.paths.root / "build" / "compare_paratranz").resolve()
     scope_output_root = output_base / scope_dir
 

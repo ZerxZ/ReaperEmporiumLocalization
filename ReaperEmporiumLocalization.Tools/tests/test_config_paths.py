@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from reaper_tools.config.configuration import FilepathSettings, ParatranzSettings
@@ -16,8 +17,9 @@ class ConfigAndPathTests(unittest.TestCase):
             env_file = Path(temp_dir) / ".env"
             env_file.write_text("PATH_GAME_ROOT=\nPARATRANZ_PROJECT_ID=\n", encoding="utf-8")
 
-            filepath = FilepathSettings(_env_file=env_file)
-            paratranz = ParatranzSettings(_env_file=env_file)
+            with patch.dict("os.environ", {}, clear=True):
+                filepath = FilepathSettings(_env_file=env_file)
+                paratranz = ParatranzSettings(_env_file=env_file)
 
         self.assertIsNone(filepath.game_root)
         self.assertEqual(paratranz.project_id, 0)
